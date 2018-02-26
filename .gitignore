@@ -50,3 +50,10 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Keil Temp files
+*.LST
+*.lst
+*.bak
+*.hex
+*.m51
