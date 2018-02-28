@@ -1,0 +1,58 @@
+#include "define.h"
+#include "bitmap.h"
+
+#ifdef TSTAT_ARM
+	#ifdef TSTAT7_ARM
+		const _STR_GPIO_MAP_ gpio_map[GPIO_DEFINE_END] = 
+		{
+		 {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_9},  	//UART_TX			A9
+		 {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_10},	//UART_RX			A10
+		 {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_8},		//RS485_TXEN		A8
+		 {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_3},		//EEP_SCL			A3
+		 {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_2},		//EEP_SDA			A2
+		 {0,	0, 0},								    //EEP_WP			 
+		 {RCC_APB2Periph_GPIOC,	GPIOC, GPIO_Pin_12},	//KEYPAD_HIGH		C12
+		 {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_6},		//K1	A6
+		 {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_5},		//K2	A5
+		 {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_15},	//K3	A15 
+		 {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_14},	//K4	A14
+		 {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_13},	//K5	A13
+		 {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_12},	//K6	A12
+		
+		 
+		 {RCC_APB2Periph_GPIOC,	GPIOC, GPIO_Pin_3},	//AI_TYPE0	C3
+		 {RCC_APB2Periph_GPIOC,	GPIOC, GPIO_Pin_2},	//AI_TYPE1	C2
+		 {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_6},	//AI_CHSEL0	A6
+		 {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_7},	//AI_CHSEL0	A7
+		 {RCC_APB2Periph_GPIOC,	GPIOC, GPIO_Pin_4},	//AI_CHSEL0	C4
+		 {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_5},	//AI_MODE_SEL	A5
+		};
+	#else
+const _STR_GPIO_MAP_ gpio_map[GPIO_DEFINE_END] = 
+{
+ {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_9},  	//UART_TX			A9
+ {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_10},	//UART_RX			A10
+ {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_8},		//RS485_TXEN		A8
+ {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_3},		//EEP_SCL			A3
+ {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_2},		//EEP_SDA			A2
+ {0,	0, 0},																	//EEP_WP			A2
+ {RCC_APB2Periph_GPIOC,	GPIOC, GPIO_Pin_12},	//KEYPAD_HIGH	C12
+ {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_15},	//K1	A15 
+ {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_14},	//K2	A14
+ {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_13},	//K3	A13
+ {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_12},	//K4	A12
+ 
+ {RCC_APB2Periph_GPIOC,	GPIOC, GPIO_Pin_3},	//AI_TYPE0	C3
+ {RCC_APB2Periph_GPIOC,	GPIOC, GPIO_Pin_2},	//AI_TYPE1	C2
+ {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_6},	//AI_CHSEL0	A6
+ {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_7},	//AI_CHSEL0	A7
+ {RCC_APB2Periph_GPIOC,	GPIOC, GPIO_Pin_4},	//AI_CHSEL0	C4
+ {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_5},	//AI_MODE_SEL	A5
+};
+#endif
+#endif
+
+
+
+
+
