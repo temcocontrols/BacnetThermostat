@@ -17,6 +17,16 @@
 //	{0xff, 0x03, 0x00, 0x6c, 0x00, 0x01, 0x31, 0xc9},	//reg 108:humidity
 //	{0xff, 0x03, 0x00, 0x6d, 0x00, 0x01, 0x00, 0x09}	//reg 109:co2	
 //};
+//#define BAUDRATE_9600						0
+//#define BAUDRATE_19200					1
+//#define BAUDRATE_38400          2
+//#define BAUDRATE_57600					3
+//#define BAUDRATE_115200					4
+//#define BAUDRATE_76800					5
+//#define BAUDRATE_1200						6
+//#define BAUDRATE_4800						7
+//#define BAUDRATE_14400					8
+unsigned int short const baudrate[9]={96,192,384,576,1152,768,12,48,144};
 
 uint8 const poll_co2_cmd[9]={0xFF, 0x01, 0x86, 0x00,0x00,0x00,0x00,0x00,0X79};
 

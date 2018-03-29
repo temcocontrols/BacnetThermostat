@@ -57,3 +57,4 @@ dkms.conf
 *.bak
 *.hex
 *.m51
+**/OBJ

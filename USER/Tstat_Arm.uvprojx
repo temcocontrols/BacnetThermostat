@@ -47,7 +47,7 @@
             <InvalidFlash>1</InvalidFlash>
           </TargetStatus>
           <OutputDirectory>..\OBJ\</OutputDirectory>
-          <OutputName>Tstat8_Rev5_9</OutputName>
+          <OutputName>Tstat8_Rev6_2</OutputName>
           <CreateExecutable>1</CreateExecutable>
           <CreateLib>0</CreateLib>
           <CreateHexFile>1</CreateHexFile>
@@ -347,7 +347,7 @@
           </ArmAdsMisc>
           <Cads>
             <interw>1</interw>
-            <Optim>1</Optim>
+            <Optim>2</Optim>
             <oTime>0</oTime>
             <SplitLS>0</SplitLS>
             <OneElfS>0</OneElfS>
@@ -464,14 +464,14 @@
               <FilePath>.\Constcode.c</FilePath>
             </File>
             <File>
-              <FileName>pidlib_arm.lib</FileName>
-              <FileType>4</FileType>
-              <FilePath>.\pidlib_arm.lib</FilePath>
-            </File>
-            <File>
               <FileName>setpointlib_arm.LIB</FileName>
               <FileType>4</FileType>
               <FilePath>.\setpointlib_arm.LIB</FilePath>
+            </File>
+            <File>
+              <FileName>pidlib_arm.lib</FileName>
+              <FileType>4</FileType>
+              <FilePath>.\pidlib_arm.lib</FilePath>
             </File>
           </Files>
         </Group>
@@ -712,11 +712,6 @@
               <FileName>eep_mapping.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\EEP-MAP\eep_mapping.c</FilePath>
-            </File>
-            <File>
-              <FileName>eepDefine.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\eepDefine.h</FilePath>
             </File>
           </Files>
         </Group>

@@ -17,6 +17,10 @@
 // page 254 0x0807 f000  - 0x0807 f7ff    2K  VAR
 // page 255 0x0807 f800  - 0x0807 ffff    2K  
 
+#define FLASH_MODBUS_ID      		 0x8007700//use this to store modbus ID
+#define FLASH_SERIAL_NUM_LO      0x8007710//use this to store serial number infomation 
+#define FLASH_SERIAL_NUM_HI      0x8007720//use this to store serial number infomation
+
 #define WR_PAGE_FLAG					0X0803d800
 #define AR_PAGE_FLAG    			0X0803e000
 #define OUT_PAGE_FLAG					0x0803e800//0x807d000
@@ -24,7 +28,7 @@
 #define AV_PAGE_FLAG 					0x0803f800//0x807f000  //FLASH_APP1_ADDR + 254*STM_SECTOR_SIZE
  
 
-
+//#define INFO_PAGE	(OUT_PAGE_FLAG+2)	
 #define OUT_PAGE	(OUT_PAGE_FLAG+2)	
 #define IN_PAGE		(IN_PAGE_FLAG+2)
 #define AV_PAGE		(AV_PAGE_FLAG+2) 

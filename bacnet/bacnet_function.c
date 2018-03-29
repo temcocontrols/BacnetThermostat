@@ -16,6 +16,8 @@
 #include "setpoint.h"
 //#include "Pid.h"
 #include "LCD.h"
+#include "stmflash.h"
+#include "Constcode.h"
 
 //extern void Set_day_setpoint(uint8 sp_highbyte, uint8 sp_lowbyte);
 //extern void Set_night_setpoint(uint8 sp_highbyte, uint8 sp_lowbyte);
@@ -80,31 +82,31 @@ void Get_AVS(void)
 	switch(EEP_Baudrate)
 	{
 		case  BAUDRATE_9600:
-			av[0] = 96;
+			av[0] = baudrate[0];
 		break;
 		case  BAUDRATE_19200:
-			av[0] = 192;
+			av[0] = baudrate[1];
 		break;
 		case  BAUDRATE_38400:
-			av[0] = 384;
+			av[0] = baudrate[2];
 		break;
 		case  BAUDRATE_57600:
-			av[0] = 576;
+			av[0] = baudrate[3];
 		break;
 		case  BAUDRATE_115200:
-			av[0] = 1152;
+			av[0] = baudrate[4];
 		break;	
 		case  BAUDRATE_76800:
-			av[0] = 768;
+			av[0] = baudrate[5];
 		break;
 		case  BAUDRATE_1200:
-			av[0] = 12;
+			av[0] = baudrate[6];
 		break;
 		case  BAUDRATE_4800:
-			av[0] = 48;
+			av[0] = baudrate[7];
 		break;
 		case  BAUDRATE_14400:
-			av[0] = 144;
+			av[0] = baudrate[8];
 		break;	
 			
 		default:
@@ -210,28 +212,28 @@ void wirte_bacnet_value_to_buf(uint8_t type,uint8_t priority,uint8_t i,float val
 			{
 				switch(av[0])
 				{
-					case 96:
+					case BAC_BAUDRATE_9600:
 						update_flag = 4;
 						EEP_Baudrate = 0;
 					  
 					break;
 
-					case 192:
+					case BAC_BAUDRATE_19200:
 						update_flag = 4;
 						EEP_Baudrate = 1;
 					break;
 
-					case 384:
+					case BAC_BAUDRATE_38400:
 						update_flag = 4;
 						EEP_Baudrate = 2;
 					break;
 
-					case 576:
+					case BAC_BAUDRATE_57600:
 						update_flag = 4;
 						EEP_Baudrate = 3;
 					break;
 
-					case 1152:
+					case BAC_BAUDRATE_115200:
 						update_flag = 4;
 						EEP_Baudrate = 4;
 					break;
@@ -247,6 +249,8 @@ void wirte_bacnet_value_to_buf(uint8_t type,uint8_t priority,uint8_t i,float val
 				laddress = Station_NUM;
 				write_eeprom(EEP_ADDRESS, Station_NUM);
 				write_eeprom(EEP_STATION_NUMBER, Station_NUM);
+				flash_buf[0] = laddress;	
+				STMFLASH_Write(FLASH_MODBUS_ID, flash_buf, 1);
 				Inital_Bacnet_Server();
 				//laddress = value;
 			}

@@ -9,7 +9,7 @@
 #include "lcd.h"
 #include "touch.h"
 #include "flash.h"
-#include "stmflash.h"
+//#include "stmflash.h"
 //#include "sdcard.h"
 #include "mmc_sd.h"
 #include "dma.h"
@@ -57,7 +57,7 @@
 #include "ProductModel.h"
 #include "stm32f10x_iwdg.h"
 #include "store.h"
-
+#include "stmflash.h"
 #include "tstat7_lcd.h"
 #include "tstat7_menu.h"
 
@@ -497,7 +497,9 @@ void Warmboot(void)
 	{
 		laddress =  254;
 		ID_Lock = ID_WRITE_ENABLE;
-		write_eeprom(EEP_ADDRESS , laddress );
+		flash_buf[0] = laddress;	
+		STMFLASH_Write(FLASH_MODBUS_ID, flash_buf, 1);	
+		write_eeprom(EEP_ADDRESS , laddress ); 
 	}
 	
 	lcd_rotate_max = read_eeprom(EEP_LCD_ROTATE_ENABLE);
@@ -902,13 +904,19 @@ int main(void)
 #endif
 
 #ifndef TSTAT8_HUNTER 
-  if(RTC_Init())
+  while(RTC_Init())
 	{ 
+	if(i<5)
+		i++;
+	else
+	{
+		#ifndef TSTAT7_ARM 
+		disp_str(FORM15X30, 0,  0,  "RTC Err",TSTAT8_CH_COLOR,TSTAT8_BACK_COLOR);	
+		#endif
+		break;
+	}
 	update_flag = 3;
-	#ifndef TSTAT7_ARM 
-	disp_str(FORM15X30, 0,  0,  "RTC Err",TSTAT8_CH_COLOR,TSTAT8_BACK_COLOR);	
-	#endif
-	delay_ms(2000);	
+	delay_ms(1000);	
 	}	
 #endif	
 	

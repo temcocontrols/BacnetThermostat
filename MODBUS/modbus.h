@@ -119,8 +119,8 @@ enum {
 	FREE_COOL_CONFIG,//				//		 Free cool configure register.bit0,free cool enable/disable,0 = disable,1= enable.
 	RS485_MODE,//120	
 	TEMPRATURE_CHIP,//TEMPRATURE_SENSOR, //101/121 Calibrated temperature chip reading	(0.1 degrees)
-	ANALOG1_RANGE, //							
-	ANALOG2_RANGE, //
+	ANALOG1_RANGE,//							
+	ANALOG2_RANGE,//
 	ANALOG3_RANGE,//
 	ANALOG4_RANGE, 
 	ANALOG5_RANGE,//
@@ -542,8 +542,8 @@ enum {
  	LOCK_REGISTER, 
 	PIR_STAGE,  
 	FIRST_CAL_FLAG, //	        // picdataok
-	RTC_HUM_CAL_EREASE,//			// erease current PIC calibration data table  
-	RTC_HUMCOUNT3_H ,//		
+	BAC_INSTANCE_LO,//RTC_HUM_CAL_EREASE,//			// erease current PIC calibration data table  
+	BAC_INSTANCE_HI,//RTC_HUMCOUNT3_H ,//		
 	RTC_HUMRH3_H	,	//		
 	RTC_HUMCOUNT4_H ,//		
 	RTC_HUMRH4_H	,	//			

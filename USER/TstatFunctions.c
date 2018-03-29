@@ -21,7 +21,9 @@
 #include "modbus.h"
 #include "bacnet.h"
 #include "rs485.h"
+#include "stmflash.h"
 
+uint16_t flash_buf[2];
 extern Wr_one_day wr_times[MAX_WR][MAX_SCHEDULES_PER_WEEK];
 
 extern uint8 zigbee_alive;
@@ -212,6 +214,7 @@ void InitialRAM(void)
 {
 	uint16 i,j;
 	uint8 temp;
+	uint8 serialnum[4];
 	EEP_DEGCorF = read_eeprom(EEP_DEGC_OR_F);
 	if(EEP_DEGCorF>1)
 	{
@@ -221,17 +224,71 @@ void InitialRAM(void)
 	for(i=0;i<TOTAL_EEP_VARIABLES;i++)//i = MAXEEPCONSTRANGE ; i < TOTAL_EE_PARAMETERS
 		{
 		temp = read_eeprom(i);
-		if((i>=MAXEEPCONSTRANGE)&&(i<TOTAL_EE_PARAMETERS))		
+		if((i>=MAXEEPCONSTRANGE)&&(i<TOTAL_EE_PARAMETERS))
+		{			
 			if((temp >= parameter_array[EEP_DEGCorF][i-MAXEEPCONSTRANGE][LOWER])	&& (temp <= parameter_array[EEP_DEGCorF][i-MAXEEPCONSTRANGE][UPPER]))		
 				b.eeprom[i] = temp;
 			else
 				{
-				b.eeprom[i] = parameter_default[EEP_DEGCorF][i  - MAXEEPCONSTRANGE];
+				b.eeprom[i] = parameter_default[EEP_DEGCorF][i - MAXEEPCONSTRANGE];
 				write_eeprom(i, b.eeprom[i]);
 				}
+		}
 		else
 				b.eeprom[i] = temp;
 		}
+	//if ID which store in EEPROM is 0xff or 0, use backup ID which store in flash.
+	STMFLASH_Read(FLASH_MODBUS_ID, flash_buf, 2);
+	temp = flash_buf[0];		
+  if((laddress == 0xff) || (laddress == 0))
+  {		
+		STMFLASH_Read(FLASH_MODBUS_ID, flash_buf, 2);	
+		laddress = flash_buf[0];
+		if((laddress == 255) || (laddress == 0))
+			laddress = 254;
+	}
+	else if(temp != laddress)//if eeprom id not equal to flash id, copy eeprom id to flash
+	{
+		flash_buf[0] = laddress;	
+		STMFLASH_Write(FLASH_MODBUS_ID, flash_buf, 1);		
+	}
+
+	
+	
+	for(i=0;i<4;i++)
+		serialnum[i] = read_eeprom(i);
+	//if eeprom serial number all are 0xff or 0x00, use flash back up infomation 
+	if((serialnum[0] == 0xff)&&(serialnum[1] == 0xff)&&( serialnum[2] == 0xff)&&( serialnum[3] == 0xff))
+	{
+		STMFLASH_Read(FLASH_SERIAL_NUM_LO, flash_buf, 2);	
+		SerialNumber(0) = flash_buf[0];
+		SerialNumber(1) = flash_buf[1];
+
+		STMFLASH_Read(FLASH_SERIAL_NUM_HI, flash_buf, 2);	
+		SerialNumber(2) = flash_buf[0];
+		SerialNumber(3) = flash_buf[1];	
+	}
+	else if((serialnum[0] == 0)&&(serialnum[0] == 0)&&( serialnum[0] == 0)&&( serialnum[0] == 0))
+	{
+		STMFLASH_Read(FLASH_SERIAL_NUM_LO, flash_buf, 2);	
+		SerialNumber(0) = flash_buf[0];
+		SerialNumber(1) = flash_buf[1];
+
+		STMFLASH_Read(FLASH_SERIAL_NUM_HI, flash_buf, 2);	
+		SerialNumber(2) = flash_buf[0];
+		SerialNumber(3) = flash_buf[1];		
+	}
+	else if((serialnum[0] != SerialNumber(0)) && (serialnum[1] != SerialNumber(1)) && (serialnum[2] != SerialNumber(2)) && (serialnum[3] != SerialNumber(3)))//
+	{
+		flash_buf[0] = serialnum[0];
+		flash_buf[1] = serialnum[1];		
+		STMFLASH_Write(FLASH_SERIAL_NUM_LO, flash_buf, 2);
+
+		flash_buf[0] = serialnum[2];
+		flash_buf[1] = serialnum[3];		
+		STMFLASH_Write(FLASH_SERIAL_NUM_LO, flash_buf, 2);
+	}
+	
 	if(hum_manual_enable == 0xff)
 		{
 		hum_manual_enable = 0;
@@ -503,6 +560,29 @@ void InitialRAM(void)
 		top_of_4to20ma = read_eeprom(EEP_4TO20MA_TOP + 1);
 		top_of_4to20ma *= 256; 
 		top_of_4to20ma |= read_eeprom(EEP_4TO20MA_TOP);		
+		
+		#ifndef TSTAT7_ARM
+		for(i=0;i<9;i++)
+		{
+			if(IconOutputControl(i) == 0xff)//EEPROM orignal data, need to be intitialized
+			{
+				IconOutputControl(i) = 0;
+				write_eeprom(EEP_ICON_DAY_OUTPUT_CONTROL+i, 0);
+			}
+		}
+		#endif //nTstat7	
+
+    if(EEP_DTERM1 == 0xff)
+		{
+			EEP_DTERM1 = 0;
+			write_eeprom(EEP_DTERM , 0 );
+		}
+		if(PidSampleTime == 0xff)
+		{
+			PidSampleTime = 0;
+			write_eeprom(EEP_PID_SAMPLE_TIME , 0 );
+		}
+		
 //	wr_times[0][0].time[0].hours = ScheduleMondayEvent1(0);
 //	wr_times[0][0].time[0].minutes = ScheduleMondayEvent1(1);	
 //	wr_times[0][0].time[1].hours = ScheduleMondayEvent1(2);
@@ -1712,6 +1792,8 @@ void accept_parameter(void)
 		{//allow user change ID by keypads, do not lock
 				write_eeprom(EEP_ADDRESS , menubuffer.new_parameter) ;
 			  laddress =  menubuffer.new_parameter ;
+				flash_buf[0] = laddress;	
+				STMFLASH_Write(FLASH_MODBUS_ID, flash_buf, 1);
 				Station_NUM = laddress;
 		}
 

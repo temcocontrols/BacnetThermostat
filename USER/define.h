@@ -333,6 +333,15 @@ extern uint32 TANGLE_COLOR;
 #define BAUDRATE_4800						7
 #define BAUDRATE_14400					8
 
+#define BAC_BAUDRATE_9600						96
+#define BAC_BAUDRATE_19200					192
+#define BAC_BAUDRATE_38400          384
+#define BAC_BAUDRATE_57600					576
+#define BAC_BAUDRATE_115200					1152
+#define BAC_BAUDRATE_76800					768
+#define BAC_BAUDRATE_1200						12
+#define BAC_BAUDRATE_4800						48
+#define BAC_BAUDRATE_14400					144
 
 #define STM32F10X
 

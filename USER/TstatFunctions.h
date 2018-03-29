@@ -17,6 +17,7 @@ extern uint8 zigbee_index;
 extern uint8 zigbee_point_info[48];
 #endif
 
+extern uint16_t flash_buf[2];
 extern uint8 icon_flag[9];
 extern uint8 deadmaster_triggered;
 extern uint16 deadmaster_timer;

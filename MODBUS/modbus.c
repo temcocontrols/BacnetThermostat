@@ -31,6 +31,9 @@
 #include "task.h"
 #include "queue.h"
 #include "ProductModel.h"
+#include "store.h"
+#include "stmflash.h"
+
 
 uint8 zigbee_alive = 0;
 uint8 ScheduleModeNum = 0;
@@ -509,7 +512,7 @@ void USART3_IRQHandler(void)                	//
 		 for(i=0;i<8;i++)
 		 {
 			checksum += USART_RX_BUFE[i];
-			ctest[i] = USART_RX_BUFE[i];
+//			ctest[i] = USART_RX_BUFE[i];
 		 }
 		 
 	  checksum = 0xff - checksum;
@@ -817,6 +820,10 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 				SN_WR_Flag |= 0x01;	
 				write_eeprom(EEP_SERIALNUMBER_LOWORD, *(bufadd+5));
 				write_eeprom(EEP_SERIALNUMBER_LOWORD + 1, *(bufadd+4));
+					
+				flash_buf[0] = *(bufadd+5);
+  			flash_buf[1] = *(bufadd+4);		
+				STMFLASH_Write(FLASH_SERIAL_NUM_LO, flash_buf, 2);
 				write_eeprom(EEP_SERINALNUMBER_WRITE_FLAG, SN_WR_Flag);
 				}
 			}
@@ -832,6 +839,9 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 				write_eeprom(EEP_SERIALNUMBER_HIWORD, *(bufadd+5));
 				write_eeprom(EEP_SERIALNUMBER_HIWORD + 1, *(bufadd+4));					
 				write_eeprom(EEP_SERINALNUMBER_WRITE_FLAG, SN_WR_Flag);
+				flash_buf[0] = *(bufadd+5);
+  			flash_buf[1] = *(bufadd+4);		
+				STMFLASH_Write(FLASH_SERIAL_NUM_HI, flash_buf, 2);
 				}
 			}			
 //	  else if(address == VERSION_NUMBER_HI)
@@ -848,6 +858,9 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 					ID_Lock = ID_WRITE_ENABLE;//after ID write operation, lock ID automatically
 					write_eeprom(EEP_ID_WRITE_ENABLE, ID_WRITE_ENABLE);
 					write_eeprom(EEP_ADDRESS, *(bufadd+5) );
+					flash_buf[0] = *(bufadd+5);	
+					STMFLASH_Write(FLASH_MODBUS_ID, flash_buf, 1);	
+						
 					laddress = *(bufadd+5);	
 					Station_NUM = *(bufadd+5);//bacnet station number the same as modbus ID
 					ID_Lock = ID_WRITE_DISABLE;//after ID write operation, lock ID automatically
@@ -933,6 +946,8 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 			{
 			laddress = *(bufadd+5); 	
 			write_eeprom(EEP_ADDRESS, *(bufadd+5));
+			flash_buf[0] = laddress;	
+			STMFLASH_Write(FLASH_MODBUS_ID, flash_buf, 1);				
 			}
 			else if(*(bufadd+4) == 0x66)//disable to response scan request for a few minutes and reset the timer
 			{
@@ -2910,6 +2925,14 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 			lcd_rotate_max = *(bufadd+5);
 			write_eeprom(EEP_LCD_ROTATE_ENABLE,*(bufadd+5));		 
 			}	
+	  
+//    else if(address == BAC_INSTANCE_LO)
+//		{
+//			
+//		
+//		}			
+//			
+			
 
 		else if(address == SCHEDULE_ON_OFF )//1:ON  0:OFF
 			{
@@ -6471,20 +6494,20 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 					
 				else if(address == TSTAT_TEST4) //
 					{
-					temp1 = 0;//((uint16)newpid.Kp >> 8) & 0xff;
-					temp2 = 0;//(uint16)newpid.Kp & 0xff;	
+					temp1 = (ctest[3] >> 8) & 0xff;
+					temp2 = ctest[3] & 0xff;
 					}
 
 				else if(address == TSTAT_TEST5) //
 					{
-					temp1 = 0;//((uint16)newpid.Ki >> 8) & 0xff;
-					temp2 = 0;// (uint16)newpid.Ki & 0xff;			
+					temp1 = (ctest[4] >> 8) & 0xff;
+					temp2 = ctest[4] & 0xff;		
 					}
 					
 				else if(address == TSTAT_TEST6) //
 					{
-					temp1 = 0;//((uint16)newpid.Kd >> 8) & 0xff;
-					temp2 = 0;//(uint16)newpid.Kd & 0xff;			
+					temp1 = (ctest[5] >> 8) & 0xff;
+					temp2 = ctest[5] & 0xff;			
 					}	
 
 				else if(address == TSTAT_TEST7) //
@@ -6517,7 +6540,7 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 				else if(address == SPARE1)
 					{
 					temp1 = 0;//(ctest1 >> 8) & 0xff;
-					temp2 = USART_RX_BUFC[0] & 0xff;
+					temp2 = SN_WR_Flag & 0xff;
 
 					}
 

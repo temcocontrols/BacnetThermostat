@@ -16,6 +16,8 @@
 #include "usart.h"
 #include "bacnet.h"
 #include "rs485.h"
+#include "store.h"
+#include "stmflash.h"
 
 #ifdef TSTAT7_ARM
 extern uint8 heat_cool_flag;
@@ -1667,6 +1669,8 @@ static void accept_parameter( )
 //				}
 //				iap_program_data_byte(0x00, DATA_TO_ISP + 16);	  	
 				ID_Lock = ID_WRITE_ENABLE; 
+				flash_buf[0] = laddress;	
+					STMFLASH_Write(FLASH_MODBUS_ID, flash_buf, 1);
 				new_write_eeprom(EEP_ADDRESS , laddress) ; 			
 				break;
 			/*	case CAL:
@@ -2932,7 +2936,15 @@ static void DisplayVer(void)
 	delay_ms(2000); 
 	putText(1,(uint8 *)"        ");
 	putText(0,(uint8 *)"  ADDR  ");	
-	laddress = new_read_eeprom(EEP_ADDRESS );	  
+	//laddress = new_read_eeprom(EEP_ADDRESS );	
+	STMFLASH_Read(FLASH_MODBUS_ID, flash_buf, 2);	
+	laddress = flash_buf[0];//new_read_eeprom(EEP_ADDRESS );
+	flash_buf[0] = 254;
+	if((laddress == 0xff)||(laddress == 0)) 
+	{
+		STMFLASH_Write(FLASH_MODBUS_ID, flash_buf, 1);	
+		write_eeprom(EEP_ADDRESS , 254);	
+	}
 	displayinteger(laddress);	 
 	delay_ms(2000); 
     
