@@ -14,6 +14,9 @@
 #include "setpoint.h"
 #include "eepdefine.h"
 extern uint8 scheduleoff;
+uint8 item_menu_timer = 0; 
+uint8 item_menu = 0;
+uint8 current_item = 0;
 uint8 prev_keypad_state;
 uint8 setpoint_adjust_flag = 0; 
 uint8 down_key = 0;
@@ -208,24 +211,88 @@ void keypad_handler( void )		//
 			}
 			else
 			{
-			switch(prev_keypad_state)
+				if(item_menu == 0) //first time in to item menu					
 				{
-				case COOL_DOWN_CODE:
-					menu_id = DECREASE_COOLING_SETPOINT;
-				break;
+					switch(prev_keypad_state)
+						{
+						case COOL_DOWN_CODE:
+						//menu_id = DECREASE_COOLING_SETPOINT;
+						break;
+					
+						case COOL_UP_CODE:
+						//menu_id = INCREASE_COOLING_SETPOINT;
+						break;
 
-				case FAN_MODE_CODE:												
-					menu_id = INCREASE_FAN_SPEED;//DECREASE_FAN_SPEED;
-					break;
-
-				case COOL_UP_CODE:
-					menu_id = INCREASE_COOLING_SETPOINT;
-					break;
+						case FAN_MODE_CODE:												
+						//menu_id = INCREASE_FAN_SPEED;//DECREASE_FAN_SPEED;
+						menu_id = SELECT_ITEM_UP;
+						item_menu = 1;
+						current_item = 1;
+						item_menu_timer = 5;
+						break;
 				
-				case SYS_MODE_CODE://lower right button 
-					menu_id = INCREASE_SYS_MODE;
-					break;	
-				} //switch keypad_state
+						case SYS_MODE_CODE://lower right button 
+						//menu_id = INCREASE_SYS_MODE;
+						menu_id = SELECT_ITEM_DOWN;
+						item_menu = 1;
+						current_item = 1;
+						item_menu_timer = 5;
+						break;	
+						} //switch keypad_state
+					}
+				else
+				{
+					switch(prev_keypad_state)
+						{
+						case COOL_DOWN_CODE:
+							if(current_item == 1)
+								menu_id = DECREASE_COOLING_SETPOINT;
+							else if(current_item == 2)
+								menu_id = T8_DECREASE_FAN_SPEED;
+							else if(current_item == 3)
+								menu_id = DECREASE_SYS_MODE;
+							
+							item_menu_timer = 5;
+						break;
+					
+						case COOL_UP_CODE:
+							if(current_item == 1)
+								menu_id = INCREASE_COOLING_SETPOINT;
+							else if(current_item == 2)
+								menu_id = INCREASE_FAN_SPEED;
+							else if(current_item == 3)
+								menu_id = INCREASE_SYS_MODE;
+							
+							item_menu_timer = 5;
+						break;
+
+						case FAN_MODE_CODE:												
+						//menu_id = INCREASE_FAN_SPEED;//DECREASE_FAN_SPEED;
+						menu_id = SELECT_ITEM_UP;
+						item_menu = 1;
+						if(current_item < 3)
+							current_item++;
+						else
+							current_item = 1;
+						
+						item_menu_timer = 5;
+						break;
+				
+						case SYS_MODE_CODE://lower right button 
+						//menu_id = INCREASE_SYS_MODE;
+						menu_id = SELECT_ITEM_DOWN;
+						item_menu = 1;
+						if(current_item >  1)
+							current_item--;
+						else
+							current_item = 3;
+						
+						item_menu_timer = 5;
+						break;	
+						} //switch keypad_state
+				}
+				
+					
 			// MDF 12/06/04 Added Ort - OVERRIDE_TIMER to allow user to override the unoccupied mode of the clock
 			// If any button has been pressed, check to see if the ORT should be turned on
 			// if the tstat is unoccupied, the override timer should be turned on

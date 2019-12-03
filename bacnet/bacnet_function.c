@@ -18,14 +18,69 @@
 #include "LCD.h"
 #include "stmflash.h"
 #include "Constcode.h"
+#include "bactimevalue.h"
+#include "bsp_esp8266.h"
 
-//extern void Set_day_setpoint(uint8 sp_highbyte, uint8 sp_lowbyte);
-//extern void Set_night_setpoint(uint8 sp_highbyte, uint8 sp_lowbyte);
+#define BACNET_VENDOR_NETIX 	"NETIX Controls"
+#define BACNET_VENDOR_JET			"JetControls"
+#define BACNET_VENDOR_TEMCO	 	"TemcoControls"
+
+#define BACNET_PRODUCT_NETIX 	"NCCB"
+#define BACNET_PRODUCT_JET		"Jet Product"
+#define BACNET_PRODUCT_TEMCO	"Temco Product"
+		
+#define BACNET_VENDOR_ID_NETIX 1007
+#define BACNET_VENDOR_ID_JET 997
+#define BACNET_VENDOR_ID_TEMCO 148
+
+
+typedef	union
+	{
+		U8_T all[10];
+		struct 
+		{
+			U8_T sec;				/* 0-59	*/
+			U8_T min;    		/* 0-59	*/
+			U8_T hour;      		/* 0-23	*/
+			U8_T day;       		/* 1-31	*/
+			U8_T week;  		/* 0-6, 0=Sunday	*/
+			U8_T mon;     		/* 1-12	*/
+			U8_T year;      		/* 0-99	*/
+			U16_T day_of_year; 	/* 0-365	*/
+			S8_T is_dst;        /* daylight saving time on / off */		
+				
+		}Clk;
+		struct
+    {
+        U32_T timestamp;
+        S8_T time_zone;
+        U8_T daylight_saving_time;
+        U8_T reserved[3];
+    }NEW;
+	}UN_Time;
+	
+UN_Time Rtc;	
+BACNET_DATE Local_Date;
+BACNET_TIME Local_Time;
+uint8 flag_Updata_Clock;
+S16_T far timezone;	
+
+uint8 far wr_time_on_off[MAX_WR][MAX_SCHEDULES_PER_WEEK][6];
+float output_priority[MAX_OUTS][16]; 
+uint8 piority_flag = 0;
+
+char* bacnet_vendor_name = BACNET_VENDOR_TEMCO;
+char* bacnet_vendor_product = BACNET_PRODUCT_TEMCO;
+U8_T far Bacnet_Vendor_ID;
+
+
+
+extern bool Send_I_Am_Flag;	
 extern uint8 init_PID_flag;
-extern int16 ctest[10];
+//extern int16 ctest[10];
 extern void Inital_Bacnet_Server(void);
 extern u32 Instance;
-int16 av[20] = {0,1,2,3,4,5,6,7,8,9};
+int32 av[20] = {0,1,2,3,4,5,6,7,8,9};
 
 extern int16_t valve[3];
 extern PTBDSTR RELAY_1TO5;
@@ -60,17 +115,17 @@ u16 far Test[50];
 
 uint8_t RS485_Get_Baudrate()
 {
- if(modbus.baudrate == BAUDRATE_9600)
+ if(Modbus.baudrate == BAUDRATE_9600)
   return 5;
- else if(modbus.baudrate == BAUDRATE_19200)
+ else if(Modbus.baudrate == BAUDRATE_19200)
   return 6;
- else if(modbus.baudrate == BAUDRATE_38400)
+ else if(Modbus.baudrate == BAUDRATE_38400)
   return 7;
- else if(modbus.baudrate == BAUDRATE_57600)
+ else if(Modbus.baudrate == BAUDRATE_57600)
   return 8;
- else if(modbus.baudrate == BAUDRATE_115200)
+ else if(Modbus.baudrate == BAUDRATE_115200)
   return 9;
- else if(modbus.baudrate == BAUDRATE_76800)
+ else if(Modbus.baudrate == BAUDRATE_76800)
   return 10; 
  else 
   return 6;// default is 19200
@@ -115,10 +170,12 @@ void Get_AVS(void)
 	
 		av[1] = Station_NUM;
 		av[2] = protocol_select;
-	  av[3] = (uint16)Instance;
+	  av[3] = (uint32)Instance;
 	  av[4] = schedule_on_off;
 	  av[5] = EEP_DaySpHi * 256 + EEP_DaySpLo;//day setpoint
+	 // av[5] = (float)av[5]/10;
 		av[6] = EEP_NightSpHi * 256 + EEP_NightSpLo;//night setpoint
+		//av[6] = (float)av[6]/10;
 	  av[7] = fan_speed_user;//fan mode 
 	  av[8] = EEPROM_VERSION;//software version
 	  //av[9] = 0;//cuurent mode of operation  
@@ -132,12 +189,35 @@ void Get_AVS(void)
 				av[9] = 0;
 			}	
 		av[10] = EEP_DEGCorF;//degree C/f
-	  av[11] = EEP_HeatCoolConfig;//system mode auto/heat/cool
-		av[12] = 0;//
+	  av[11] = heat_cool_user;//EEP_HeatCoolConfig;//system mode auto/heat/cool
+		av[12] = EEP_SpecialMenuLock;//keypad lock/unlock
 		av[13] = EEP_OverrideTimer;//override timer
 	  av[14] = EEP_UniversalSetpointHi * 256 + EEP_UniversalSetpointLo;//pid2 day setpoint
+		//av[14] = (float)av[14]/10;	
 	  av[15] = EEP_UniversalNightSetpointHi * 256 + EEP_UniversalNightSetpointLo;//pid2 night setpoint
+		//av[15] = (float)av[15]/10;
 		av[16] = EEP_OutputManuEnable;//output auto manual
+		if(override_timer_time > 0)
+			av[17] = 1 + override_timer_time/61;
+		else
+     	av[17] = 0;
+		
+		av[18] = EEP_DayCoolingDeadband;//cooling deadband
+		av[19] = EEP_DayHeatingDeadband;//heating deadband
+
+//    if(fan_speed_user == 0)
+//			av[18] = 1;
+//		else
+//		{
+//			if(temperature - loop_setpoint[PID_LOOP1] < 0)
+//				av[18] = 5;
+//			else if(temperature - loop_setpoint[PID_LOOP1] <= 5)
+//				av[18] = 7;
+//			else if(temperature - loop_setpoint[PID_LOOP1] <= 10)
+//				av[18] = 8;
+//			else if(temperature - loop_setpoint[PID_LOOP1] <= 15)
+//				av[18] = 9;	
+//		}
 	  
 }
 //----------------------------------------------
@@ -149,7 +229,10 @@ float Get_bacnet_value_from_buf(uint8_t type,uint8_t priority,uint8_t i)
 		case AV:
 			
 			Get_AVS();
-			return av[i];//bacnet_AV.avs[i];
+		  if(i==5 || i==6 || i==14 || i==15)
+				return (float)av[i]/10;
+			else
+				return av[i];//bacnet_AV.avs[i];
 		break;
 		
 		case AI:
@@ -158,11 +241,18 @@ float Get_bacnet_value_from_buf(uint8_t type,uint8_t priority,uint8_t i)
 				//			else
 				//				return input_raw[i];
 		if(i == 8)
-			return temperature;
+			return (float)temperature/10;
 		else if(i == 9)
-			return humidity;
+			return (float)humidity/10;
+		else if(i == 10)//co2 
+			return co2_data;
 		else
-			return mul_analog_input[i];
+		{
+			if((AI_Range(i) == AI_RANGE_10K_THERMISTOR_TYPE2) || (AI_Range(i) == AI_RANGE_10K_THERMISTOR_TYPE3) || (AI_Range(i) == AI_RANGE_USER) ||(AI_Range(i) == AI_RANGE_USER_10V)|| (AI_Range(i) == AI_RANGE_CUSTOMER_SENSOR)||(AI_Range(i) == AI_RANGE_CUSTOMER_SENSOR_10V)||(AI_Range(i) == AI_RANGE_MA)||(AI_Range(i) == AI_RANGE_VOLTAGE_5V)||(AI_Range(i) == AI_RANGE_VOLTAGE_10V))
+				return (float)mul_analog_input[i]/10;
+			else
+				return mul_analog_input[i];
+		}
 		break;
 		case AO:
 				//				if(outputs[i + max_dos].auto_manual == 0)
@@ -174,20 +264,37 @@ float Get_bacnet_value_from_buf(uint8_t type,uint8_t priority,uint8_t i)
 //				else
 //					return output_raw[i + max_dos];
 		//valve[i]
-		return  valve[i];
+		//if(priority)
+		if(output_priority[i+5][priority] == 0xff)
+			return 0xff;
+		else
+			return output_priority[i+5][priority]/100;
+    //return Analog_Output_Present_Value1(i);
+		//return  valve[i];
 		break;
 			
 		case BO:
+			if(output_priority[i][priority] == 0xff)
+				return 0xff;
+			else
+				return output_priority[i][priority];
+			//return Binary_Output_Present_Value1(i);
 
-		if(!GetByteBit(&RELAY_1TO5.BYTE,i) == 1)
-			temp = 1;
-		else
-			temp = 0;
-		return temp;
+//		if(!GetByteBit(&RELAY_1TO5.BYTE,i) == 1)
+//			temp = 1;
+//		else
+//			temp = 0;
+//		return temp;
+		
 		break;
 		
     case SCHEDULE:
-			return weekly_routines[i].value;
+			//return weekly_routines[i].value;
+//			if(fan_speed_user == 0)//unoccupied
+//				return 0;
+//			else
+//				return 1;
+			return fan_speed_user;
 		break;
 		
 		case CALENDAR:
@@ -202,6 +309,100 @@ float Get_bacnet_value_from_buf(uint8_t type,uint8_t priority,uint8_t i)
 
 }
 //------------------------------------------------------------
+//float Get_bacnet_value_from_buf(uint8_t type,uint8_t priority,uint8_t i)
+//{	
+//	uint8_t out_index;
+//	switch(type)
+//	{
+//		case AO:
+//		// find output index by AOx
+//		{
+//				
+//				if(output_priority[out_index][priority] == 0xff)
+//					return 0xff;
+//				
+//				if(outputs[out_index].digital_analog == 0)
+//				{					
+//					temp = output_priority[out_index][priority] ? 1 : 0;
+//					if((outputs[out_index].range >= ON_OFF)  && (outputs[out_index].range <= HIGH_LOW))
+//					{  // inverse logic
+//						
+//						if(temp == 1)
+//						{
+//							return 0;
+//						}
+//						else
+//						{
+//							return 1;
+//						}
+//					}	
+//					else
+//					{
+//						
+//						if(temp == 1)
+//						{
+//							return 1;
+//						}
+//						else
+//						{
+//							return 0;
+//						}
+//					}
+//				}
+//				else	
+//				{
+//					return output_priority[out_index][priority];
+//				}
+
+//			}	
+//			
+//		case BO:	
+//		{
+//			
+//			if(output_priority[out_index][priority] == 0xff)
+//				return 0xff;	
+
+//			if(outputs[out_index].digital_analog == 0)
+//			{  // digital
+//				temp = output_priority[out_index][priority] ? 1 : 0;
+//				if(outputs[out_index].range >= ON_OFF  && outputs[out_index].range <= HIGH_LOW)
+//				{  // inverse logic
+//					if(temp == 1)
+//					{
+//						return 0;
+//					}
+//					else
+//					{
+//						return 1;
+//					}
+//				}	
+//				else
+//				{
+//					if(temp == 1)
+//					{
+//						return 1;
+//					}
+//					else
+//					{
+//						return 0;
+//					}
+//				}
+//			}
+//			else
+//			{ // range is analog
+//				return output_priority[out_index][priority];
+//			}
+//		}
+//				
+//	}	
+//	return 0;
+//}
+
+
+
+
+
+//-----------------------------------------------------------
 void wirte_bacnet_value_to_buf(uint8_t type,uint8_t priority,uint8_t i,float value)
 {
 	switch(type)
@@ -238,6 +439,27 @@ void wirte_bacnet_value_to_buf(uint8_t type,uint8_t priority,uint8_t i,float val
 						EEP_Baudrate = 4;
 					break;
 					
+					case BAC_BAUDRATE_76800:
+						update_flag = 4;
+						EEP_Baudrate = 5;
+					break;
+					
+					case BAC_BAUDRATE_1200:
+						update_flag = 4;
+						EEP_Baudrate = 6;
+					break;
+					
+					case BAC_BAUDRATE_4800:
+						update_flag = 4;
+						EEP_Baudrate = 7;
+					break;
+					
+					case BAC_BAUDRATE_14400:
+					update_flag = 4;
+						EEP_Baudrate = 5;
+					break;
+					
+					
 					default:
 					break;
 				}
@@ -260,16 +482,18 @@ void wirte_bacnet_value_to_buf(uint8_t type,uint8_t priority,uint8_t i,float val
 				protocol_select = value;
 				if(value == 0)//modbus
 				{
-					modbus.com_config[0] = MODBUS;
+					Modbus.com_config[0] = MODBUS;
 					write_eeprom(EEP_PROTOCOL_SEL, 0);
 				}
 			}
 			
 			else if(i == 3)//instance number
 			{
-				Instance = (u16)value;
+				Instance = (u32)value;
 				write_eeprom(EEP_INSTANCE1, (u32)value & 0xff);
 				write_eeprom(EEP_INSTANCE2, ((u32)value>>8) & 0xff);
+				write_eeprom(EEP_INSTANCE3, ((u32)value>>16) & 0xff);
+				write_eeprom(EEP_INSTANCE4, ((u32)value>>24) & 0xff);
 				Device_Set_Object_Instance_Number(Instance);  
 			}
 			
@@ -280,15 +504,15 @@ void wirte_bacnet_value_to_buf(uint8_t type,uint8_t priority,uint8_t i,float val
 				write_eeprom(EEP_SCHEDULE_ON_OFF, schedule_on_off);
 				if(schedule_on_off)
 				{				
-					EEP_OverrideTimer = 60;	
-					write_eeprom(EEP_OVERRIDE_TIMER,60);
+					EEP_OverrideTimer = read_eeprom(EEP_OVERRIDE_TIMER);	
+					//write_eeprom(EEP_OVERRIDE_TIMER,60);
 				}
 			}
 			
 			else if(i == 5)//pid loop1 day setpoint
 			{
-				EEP_DaySpLo = (int16)value & 0xff;
-				EEP_DaySpHi = ((int16)value >> 8) & 0xff;
+				EEP_DaySpLo = (int16)(value*10) & 0xff;
+				EEP_DaySpHi = ((int16)(value*10) >> 8) & 0xff;
 				Set_day_setpoint(EEP_DaySpHi, EEP_DaySpLo);
 				init_PID_flag |= 0x01;
 				refresh_setpoint(DAY_MODE);			
@@ -296,8 +520,8 @@ void wirte_bacnet_value_to_buf(uint8_t type,uint8_t priority,uint8_t i,float val
 			
 			else if(i == 6)//pid loop1 night setpoint
 			{
-				EEP_NightSpLo = (int16)value & 0xff;
-				EEP_NightSpHi = ((int16)value >> 8) & 0xff;
+				EEP_NightSpLo = (int16)(value*10) & 0xff;
+				EEP_NightSpHi = ((int16)(value*10) >> 8) & 0xff;
 				Set_night_setpoint(EEP_NightSpHi,EEP_NightSpLo);
 				init_PID_flag |= 0x01;
 				refresh_setpoint(NIGHT_MODE);
@@ -339,12 +563,25 @@ void wirte_bacnet_value_to_buf(uint8_t type,uint8_t priority,uint8_t i,float val
 			
 			else if(i == 11)//system mode could be HEAT/COOL/AUTO
 			{
-				write_eeprom(EEP_HEAT_COOL_CONFIG,value);
-				EEP_HeatCoolConfig = value;
+//				write_eeprom(EEP_HEAT_COOL_CONFIG,HC_CTL_USER);
+//				EEP_HeatCoolConfig = HC_CTL_USER;
+//				heat_cool_user = value;
+//				write_eeprom(EEP_HC_USER, value);
+				
+					heat_cool_user = value;
+					write_eeprom(EEP_HC_USER, heat_cool_user);
+					EEP_HeatCoolConfig = HC_CTL_USER;
+					write_eeprom(EEP_HEAT_COOL_CONFIG, HC_CTL_USER);
+				#ifndef TSTAT7_ARM
+					icon.heatcool = 1;
+					icon.sysmode = 1;
+				#endif
 			}
 			
 			else if(i == 12)//
 			{
+				EEP_SpecialMenuLock = av[12];
+				write_eeprom(EEP_SPECIAL_MENU_LOCK, EEP_SpecialMenuLock);
 			}
 			
 			else if(i == 13)//override timer
@@ -356,18 +593,18 @@ void wirte_bacnet_value_to_buf(uint8_t type,uint8_t priority,uint8_t i,float val
 			
 			else if(i == 14)//pid loop2 day setpoint
 			{
-				EEP_UniversalSetpointHi = value;
-				EEP_UniversalSetpointLo = value;
-				write_eeprom(EEP_UNIVERSAL_SET, value);
-				write_eeprom(EEP_UNIVERSAL_SET + 1,value);				
+				EEP_UniversalSetpointHi = (int16)(value*10)>>8;
+				EEP_UniversalSetpointLo = (int16)(value*10) & 0xff;
+				write_eeprom(EEP_UNIVERSAL_SET, EEP_UniversalSetpointLo);
+				write_eeprom(EEP_UNIVERSAL_SET + 1,EEP_UniversalSetpointHi);				
 			}
 			
 			else if(i == 15)//pid loop2 night setpoint
 			{
-				EEP_UniversalNightSetpointHi = value;
-				EEP_UniversalNightSetpointLo = value;
-				write_eeprom(EEP_UNIVERSAL_NIGHTSET,value);
-				write_eeprom(EEP_UNIVERSAL_NIGHTSET + 1,value);				
+				EEP_UniversalNightSetpointHi = (int16)(value*10)>>8;
+				EEP_UniversalNightSetpointLo = (int16)(value*10) & 0xff;
+				write_eeprom(EEP_UNIVERSAL_NIGHTSET,EEP_UniversalNightSetpointLo);
+				write_eeprom(EEP_UNIVERSAL_NIGHTSET + 1,EEP_UniversalNightSetpointHi);				
 			}
 			
 
@@ -378,10 +615,20 @@ void wirte_bacnet_value_to_buf(uint8_t type,uint8_t priority,uint8_t i,float val
 				write_eeprom(EEP_OUTPUT_MANU_ENABLE,value);
 			}
 			
-			else if(i == 17)
+			else if(i == 18)//cooling deadband
 			{
-			
+				EEP_DayCoolingDeadband = value;
+				change_setpoint_deadband(DAY_COOLING_DB, EEP_DayCoolingDeadband);
+				init_PID_flag |= 0x01;
+				refresh_setpoint(DAY_MODE);
 			}			
+			else if(i == 19) //heating deadband
+			{
+				EEP_DayHeatingDeadband = value;
+				change_setpoint_deadband(DAY_HEATING_DB, EEP_DayHeatingDeadband);
+				init_PID_flag |= 0x01;
+				refresh_setpoint(DAY_MODE);
+			}	
 			
 			break;
 		
@@ -437,33 +684,37 @@ void wirte_bacnet_value_to_buf(uint8_t type,uint8_t priority,uint8_t i,float val
 		break;
 			
 		case AO:
-//			if(priority < 8)
-//			{
-				if(i==0)
-				{
-					ManualAO1_HI = (uint16)value >> 8 & 0xff;
-					ManualAO1_LO = (uint16)value & 0xff;					
-					write_eeprom(MANUAL_COOL_VALVE_HI,ManualAO1_HI);				
-					write_eeprom(MANUAL_COOL_VALVE_LO,ManualAO1_LO);
-				  set_output(TIM4,2, value);					
-				}
-				if(i==1)
-				{
-					ManualAO2_HI = (uint16)value >> 8 & 0xff;
-					ManualAO2_LO = (uint16)value & 0xff;					
-					write_eeprom(MANUAL_HEAT_VALVE_HI,ManualAO2_HI);				
-					write_eeprom(MANUAL_HEAT_VALVE_LO,ManualAO2_LO);
-					set_output(TIM4,3, value);							
-				}
-//			}
+      output_priority[i+5][priority] = value*100;
+			
+//				if(i==0)
+//				{
+//					ManualAO1_HI = (uint16)value >> 8 & 0xff;
+//					ManualAO1_LO = (uint16)value & 0xff;					
+//					write_eeprom(MANUAL_COOL_VALVE_HI,ManualAO1_HI);				
+//					write_eeprom(MANUAL_COOL_VALVE_LO,ManualAO1_LO);
+//				  set_output(TIM4,2, value);					
+//				}
+//				if(i==1)
+//				{
+//					ManualAO2_HI = (uint16)value >> 8 & 0xff;
+//					ManualAO2_LO = (uint16)value & 0xff;					
+//					write_eeprom(MANUAL_HEAT_VALVE_HI,ManualAO2_HI);				
+//					write_eeprom(MANUAL_HEAT_VALVE_LO,ManualAO2_LO);
+//					set_output(TIM4,3, value);							
+//				}
+
 		break;
 
 		case BO:
+			output_priority[i][priority] = value;
+			if(output_priority[i][7] == 0xff)
+				SetByteBit(&EEP_OutputManuEnable,i,0);
+			
 //				ManualRelay(i) = (uint8)value;
 //				write_eeprom(EEP_MANU_RELAY1 + i, ManualRelay(i));	
 			
-			SetByteBit(&ManualRelayAll,i,(uint8)value);
-		  write_eeprom(MANUAL_RELAY,ManualRelayAll);
+//			SetByteBit(&ManualRelayAll,i,(uint8)value);
+//		  write_eeprom(MANUAL_RELAY,ManualRelayAll);
 		break;
 
 		 case SCHEDULE:
@@ -682,13 +933,7 @@ void write_bacnet_unit_to_buf(uint8_t type,uint8_t priority,uint8_t i,uint8_t un
 //------------------------------------------------------------
 char get_AM_Status(uint8_t type,uint8_t num)
 {	
-//	if(type == AO)
-//		return outputs[max_dos + num].auto_manual;
-//	else if(type == BO)	
-//		return outputs[num].auto_manual;
-//	else
-			return 0;
-	
+		return 0;
 }
 //------------------------------------------------------------
 void write_bacent_AM_to_buf(uint8_t type,uint8_t i,uint8_t am)
@@ -962,7 +1207,8 @@ BACNET_TIME_VALUE Get_Time_Value(uint8_t object_index,uint8_t day,uint8_t i)
 	array.Time.min = wr_times[object_index][day].time[i].minutes;
 	array.Time.sec = 0;
 	array.Time.hundredths = 0;
-	array.Value.type.Enumerated = (i + 1) % 2;
+	array.Value.type.Enumerated = wr_time_on_off[object_index][day][i];//(i + 1) % 2;
+	//array.Value.type.Enumerated = (i + 1) % 2;
 	array.Value.tag = BACNET_APPLICATION_TAG_ENUMERATED;
 	return array;
 
@@ -971,13 +1217,17 @@ BACNET_TIME_VALUE Get_Time_Value(uint8_t object_index,uint8_t day,uint8_t i)
 //------------------------------------------------------------
 uint8_t Get_TV_count(uint8_t object_index,uint8_t day)
 {
+	char count;
 	char i;
-	for(i = 0;i < 8;i++)
+	count = 0;
+	for(i = 0;i < 6;i++)
 	{
-		if((wr_times[object_index][day].time[i].hours == 0) && (wr_times[object_index][day].time[i].minutes == 0))
-			return i;
+		if(wr_time_on_off[object_index][day][i] != 0xff)
+			count++;
+		//if((wr_times[object_index][day].time[i].hours == 0) && (wr_times[object_index][day].time[i].minutes == 0))
+			//return i;
 	}
-	return 8;
+	return count;
 }
 //------------------------------------------------------------
 BACNET_DEVICE_OBJECT_PROPERTY_REFERENCE * Get_Object_Property_References(uint8_t i)
@@ -985,17 +1235,120 @@ BACNET_DEVICE_OBJECT_PROPERTY_REFERENCE * Get_Object_Property_References(uint8_t
 	return NULL;
 }
 //------------------------------------------------------------
-void write_Time_Value(uint8_t index,uint8_t day,uint8_t i,uint8_t hour,uint8_t min/*BACNET_TIME_VALUE time_value*/)
-{	
-	wr_times[index][day].time[i].hours = hour;//time_value.Time.hour;
-	wr_times[index][day].time[i].minutes = min;//time_value.Time.min;
-	
-	ScheduleMondayEvent1(day*12+i*2) = hour;
-	ScheduleMondayEvent1(day*12+i*2+1) = min;
-	write_eeprom(EEP_SCHEDULE_MONDAY_EVENT1_H+day*12+i*2, hour);
-	write_eeprom(EEP_SCHEDULE_MONDAY_EVENT1_H+day*12+i*2+1, min);
 
+//void map_schedule_flag(uint8 day, uint8 event, uint8 value)
+//{
+//  uint8 flag_temp=0;
+
+//	flag_temp = ScheduleMondayFlag(event/2 + day*3);
+//	
+//	if(event%2 == 0)//low event
+//	{
+//		if(value == 1)
+//			flag_temp |= EVENT_DHOME;
+//		else if(value == 0)
+//			flag_temp |= EVENT_WORK;
+//		else if(value == 0xff)
+//			flag_temp |= EVENT_NULL;
+//	}
+//	else
+//	{
+//		if(value == 1)
+//			flag_temp |= (EVENT_DHOME<<3);
+//		else if(value == 0)
+//			flag_temp |= (EVENT_WORK<<3);
+//		else if(value == 0xff)
+//			flag_temp |= (EVENT_NULL<<3);	
+//	}
+// 		
+//	
+//}
+
+//void write_Time_Value(uint8_t index,uint8_t day,uint8_t i,uint8_t hour,uint8_t min/*BACNET_TIME_VALUE time_value*/)
+void write_Time_Value(uint8_t index,uint8_t day,uint8_t i,uint8_t hour,uint8_t min/*BACNET_TIME_VALUE time_value*/,uint8_t value)
+{	
+	uint8 flag_temp=0;
+	if(i<6)
+	{
+		if(value == 0xff)
+		{
+			wr_times[index][day].time[i].hours = 0;//time_value.Time.hour;
+			wr_times[index][day].time[i].minutes = 0;//time_value.Time.min;
+			
+			ScheduleMondayEvent1(day*12+i*2) = 0xff;
+			ScheduleMondayEvent1(day*12+i*2+1) = 0xff;
+			
+			write_eeprom(EEP_SCHEDULE_MONDAY_EVENT1_H+day*12+i*2, 0xff);
+			write_eeprom(EEP_SCHEDULE_MONDAY_EVENT1_H+day*12+i*2+1, 0xff);
+		}
+		else
+		{
+			wr_times[index][day].time[i].hours = hour;//time_value.Time.hour;
+			wr_times[index][day].time[i].minutes = min;//time_value.Time.min;
+			
+			ScheduleMondayEvent1(day*12+i*2) = hour;
+			ScheduleMondayEvent1(day*12+i*2+1) = min;
+			
+			write_eeprom(EEP_SCHEDULE_MONDAY_EVENT1_H+day*12+i*2, hour);
+			write_eeprom(EEP_SCHEDULE_MONDAY_EVENT1_H+day*12+i*2+1, min);		
+		}
+		
+		wr_time_on_off[index][day][i] = value;
+
+		flag_temp = ScheduleMondayFlag(i/2 + day*3);
+		
+		if(i%2 == 0)//low event
+		{
+			if(value == 1)
+			{
+				flag_temp &= 0xf8;
+				flag_temp |= EVENT_DHOME;
+			}
+			else if(value == 0)
+			{
+				flag_temp &= 0xf8;
+				flag_temp |= EVENT_WORK;
+			}
+			else if(value == 0xff)
+			{
+				flag_temp &= 0xf8;
+				flag_temp |= EVENT_NULL;
+			}
+		}
+		else
+		{
+			if(value == 1)
+			{
+				flag_temp &= 0xc7;
+				flag_temp |= (EVENT_DHOME<<3);
+			}
+			else if(value == 0)
+			{	
+				flag_temp &= 0xc7;
+				flag_temp |= (EVENT_WORK<<3);
+			}
+			else if(value == 0xff)
+			{
+				flag_temp &= 0xc7;
+				flag_temp |= (EVENT_NULL<<3);	
+			}
+		}
+		
+		ScheduleMondayFlag(i/2 + day*3) = flag_temp;
+		write_eeprom(EEP_SCHEDULE_MONDAY_FLAG+(i/2) + day*3, flag_temp);
+
+	}
+	schedule_change = 1;
 }
+
+//void write_Time_Value(uint8_t index,uint8_t day,uint8_t i,uint8_t hour,uint8_t min/*BACNET_TIME_VALUE time_value*/,uint8_t value)
+//{	
+//	ChangeFlash = 1;
+//	write_page_en[WR_TIME] = 1;
+//	wr_times[index][day].time[i].hours = hour;//time_value.Time.hour;
+//	wr_times[index][day].time[i].minutes = min;//time_value.Time.min;
+//	wr_time_on_off[index][day][i] = value;	
+//}
 
 //------------------------------------------------------------
 uint8_t Get_CALENDAR_count(uint8_t object_index)
@@ -1257,5 +1610,395 @@ void check_annual_routines( void )
   //	misc_flags.check_ar=0;
 }
 //------------------------------------------------------------
+char Get_Out_Of_Service(uint8_t type,uint8_t num)//0: disable outside control output  1: enable outside control output 
+{
+  if(type == AO)
+		return outputs[num].out_of_service;
+	else if(type == BO)
+		return outputs[num].out_of_service;
+}
+
+
+void write_Out_Of_Service(uint8_t type,uint8_t i,uint8_t am)
+{
+	
+
+}
+
+
+U16_T Get_Vendor_ID(void)
+{
+ return BACNET_VENDOR_ID_TEMCO;
+}
+
+const char*  Get_Vendor_Name(void)
+{
+  return BACNET_VENDOR_TEMCO;
+}
+
+const char*  Get_Vendor_Product(void)
+{
+ return BACNET_PRODUCT_TEMCO;
+}
+
+
+float Get_Output_Relinguish(uint8_t type,uint8_t i)
+{
+	return 0;
+}	
+
+void write_Output_Relinguish(uint8_t type,uint8_t i,float value)
+{
+	
+}
+
+
+
+
+void Check_wr_time_on_off(uint8_t i,uint8_t j,uint8_t mode)
+{
+	U8_T k;
+	U8_T k1,k2;
+	U16_T tmp1,tmp2,tmp;
+	U8_T tmp_onoff;
+//	Time_on_off tmp;
+//	ChangeFlash = 1;
+//#if ARM	
+//	write_page_en[WR_TIME] = 1;
+//#endif	
+	
+	for(k = 0;k < 6;k++)
+	{
+		if(mode == 0)  // T3000 write weekly roution
+		{
+			if(wr_times[i][j].time[k].hours == 0 && wr_times[i][j].time[k].minutes == 0 )
+				wr_time_on_off[i][j][k] = 0xff;
+			else
+				wr_time_on_off[i][j][k] = (k + 1) % 2;
+		}
+
+		if(wr_time_on_off[i][j][k] == 0xff)
+		{
+			if(wr_times[i][j].time[k].hours == 0 && wr_times[i][j].time[k].minutes == 0 )
+			{
+				if(k == 0)  // first one is 0
+				{
+					if(wr_times[i][j].time[k + 1].hours == 0 && wr_times[i][j].time[k + 1].minutes == 0	)
+						wr_time_on_off[i][j][k] = 0xff;
+					else
+						wr_time_on_off[i][j][k] = 1;
+				}
+				else
+					wr_time_on_off[i][j][k] = 0xff;
+			}
+			else
+				wr_time_on_off[i][j][k] = (k + 1) % 2;
+		}
+		
+	}
+	
+	// sort
+	for(k1 = 0;k1 < 6;k1++)
+	{
+		if(wr_time_on_off[i][j][k1] == 0xff)
+			continue;
+
+		tmp1 = 60L * wr_times[i][j].time[k1].hours + wr_times[i][j].time[k1].minutes;
+
+		for(k2 = k1 + 1;k2 < 6;k2++)
+		{			
+			if(wr_time_on_off[i][j][k2] == 0xff)
+				continue;
+
+			tmp2 = 60L *  wr_times[i][j].time[k2].hours + wr_times[i][j].time[k2].minutes;
+
+			if(tmp1 > tmp2)
+			{
+				tmp = tmp1;
+				tmp1 = tmp2;
+				tmp2 = tmp;
+				
+				wr_times[i][j].time[k1].hours = tmp1 / 60;
+				wr_times[i][j].time[k1].minutes = tmp1 % 60;
+				
+				wr_times[i][j].time[k2].hours = tmp2 / 60;
+				wr_times[i][j].time[k2].minutes = tmp2 % 60;
+				
+				
+				tmp_onoff = wr_time_on_off[i][j][k1];
+				wr_time_on_off[i][j][k1] = wr_time_on_off[i][j][k2]; 
+				wr_time_on_off[i][j][k2] = tmp_onoff;
+				
+			}
+		}
+	}
+}
+
+
+void Clear_Time_Value(uint8_t index,uint8_t day)
+{
+	char i;
+	
+	for(i = 0;i < 6;i++)
+	{
+		wr_times[index][day].time[i].hours = 0;
+		wr_times[index][day].time[i].minutes = 0;
+		wr_time_on_off[index][day][i] = 0xff;
+	}
+}
+
+U8_T Get_WR_ON_OFF(uint8_t object_index,uint8_t day,uint8_t i)
+{
+	return wr_time_on_off[object_index][day][i];
+}
+
+uint8_t Get_modbus_address(void)
+{
+	return Modbus.address;
+}
+
+uint8 get_schedule_flag(uint8 day, uint8 event)
+{
+  uint8 flag_temp=0;
+
+	flag_temp = ScheduleMondayFlag(event/2 + day*3);
+	
+	if(event%2 == 0)//low event
+	{
+		if((flag_temp & 0x03) == EVENT_DHOME)
+			return 1;
+		else if((flag_temp & 0x03) == EVENT_WORK)
+			return 0;
+		else if((flag_temp & 0x03) == EVENT_NULL)
+		{
+//			ScheduleMondayEvent1(day*12 + event*2) = 0;
+//			ScheduleMondayEvent1(day*12 + event*2 + 1) = 0;
+			return 0xff;
+		}
+	}
+	else//high event
+	{
+		if(((flag_temp>>3) & 0x03) == EVENT_DHOME)
+			return 1;
+		else if(((flag_temp>>3) & 0x03) == EVENT_WORK)
+			return 0;
+		else if(((flag_temp>>3) & 0x03) == EVENT_NULL)
+		{
+//			ScheduleMondayEvent1(day*12 + event*2) = 0;
+//			ScheduleMondayEvent1(day*12 + event*2 + 1) = 0;			
+			return 0xff;
+		}
+	}		
+}
+
+uint8 get_schedule_flag_2(uint8 day, uint8 event)
+{
+  uint8 flag_temp=0;
+
+	flag_temp = Schedule2MondayFlag(event/2 + day*3);
+	
+	if(event%2 == 0)//low event
+	{
+		if((flag_temp & 0x03) == EVENT_DHOME)
+			return 1;
+		else if((flag_temp & 0x03) == EVENT_WORK)
+			return 0;
+		else if((flag_temp & 0x03) == EVENT_NULL)
+		{
+//			ScheduleMondayEvent1(day*12 + event*2) = 0;
+//			ScheduleMondayEvent1(day*12 + event*2 + 1) = 0;
+			return 0xff;
+		}
+	}
+	else//high event
+	{
+		if(((flag_temp>>3) & 0x03) == EVENT_DHOME)
+			return 1;
+		else if(((flag_temp>>3) & 0x03) == EVENT_WORK)
+			return 0;
+		else if(((flag_temp>>3) & 0x03) == EVENT_NULL)
+		{
+//			ScheduleMondayEvent1(day*12 + event*2) = 0;
+//			ScheduleMondayEvent1(day*12 + event*2 + 1) = 0;			
+			return 0xff;
+		}
+	}		
+}
+
+uint8 get_current_event_flag(uint8 day, uint8 event)//day 0-7  event  0-5
+{
+ uint8 flag_temp,flag_temp1;
+
+ flag_temp = ScheduleMondayFlag(day*3 + event/2);
+ if((event % 2) == 0)
+ {
+	flag_temp1 = flag_temp & 0x03;
+	return flag_temp1;
+ }
+ else
+ {
+	flag_temp1 = (flag_temp>>3) & 0x03;
+	return flag_temp1;	 
+ }	 
+	
+}
+
+void Check_All_WR(void)//need intial this at first run time
+{
+	U8_T i,j;
+	for(i=0;i<8;i++)
+	{
+		for(j=0;j<6;j++)
+		{
+			wr_time_on_off[0][i][j] = get_schedule_flag(i,j);
+		}
+	}
+	
+	for(i=0;i<8;i++)
+	{
+		for(j=0;j<6;j++)
+		{
+			wr_time_on_off[1][i][j] = get_schedule_flag_2(i,j);
+		}
+	}
+	
+	
+//	for(i = 0;i < MAX_WR;i++)
+//		for(j = 0;j < 8;j++)
+//			Check_wr_time_on_off(i,j,1);
+}
+
+
+void Set_Daylight_Saving_Status(bool status)
+{
+	Rtc.Clk.is_dst = status;
+}
+
+bool Get_Daylight_Savings_Status(void)
+{
+	return Rtc.Clk.is_dst;
+}
+
+bool write_Local_Date(BACNET_DATE* array)
+{
+	memcpy(&Local_Date,array,sizeof(BACNET_DATE));
+	Rtc.Clk.day = array->day;
+	Rtc.Clk.mon = array->month;
+	Rtc.Clk.week = array->wday;
+	Rtc.Clk.year = array->year;
+	
+	 
+//	calendar.w_date = array->day;
+//	calendar.w_month = array->month;
+//	calendar.week = array->wday;
+//	calendar.w_year = array->year;	
+	
+	flag_Updata_Clock = 1;
+	Rtc_Set(Rtc.Clk.year,Rtc.Clk.mon,Rtc.Clk.day,calendar.hour,calendar.min,calendar.sec,0);
+	return 1;
+
+}
+
+
+bool write_Local_Time(BACNET_TIME* array)
+{
+	memcpy(&Local_Time,array,sizeof(BACNET_TIME));
+	Rtc.Clk.hour = array->hour;
+	Rtc.Clk.min = array->min;
+	Rtc.Clk.sec = array->sec;
+	
+//	calendar.hour= array->hour;
+//	calendar.min = array->min;
+//	calendar.sec = array->sec;
+	flag_Updata_Clock = 1;
+	Rtc_Set(calendar.w_year-2000,calendar.w_month,calendar.w_date,Rtc.Clk.hour,Rtc.Clk.min,Rtc.Clk.sec,0);
+	return 1;
+}
+
+
+
+S16_T Get_UTC_Offset(void)
+{
+	return timezone;
+}
+
+
+void Set_UTC_OFFset(S16_T tz)
+{
+	timezone = tz;
+}
+
+u32 Rtc_Set(u16 syear, u8 smon, u8 sday, u8 hour, u8 min, u8 sec, u8 flag)
+{
+
+  RTC_Set(syear+2000, smon,  sday,  hour,  min,  sec);
+}
+
+
+void chech_mstp_collision(void)
+{
+}
+
+void check_mstp_packet_error(void)
+{
+}
+
+void check_mstp_timeout(void)
+{}
+
+	
+bool Analog_Input_Change_Of_Value(unsigned int instance)
+{
+}
+bool Analog_Value_Change_Of_Value(unsigned int instance)
+{	
+}
+void Store_Instance_To_Eeprom(uint32_t Instance)
+{
+	write_eeprom(EEP_INSTANCE1, Instance);
+	write_eeprom(EEP_INSTANCE2, (U8_T)(Instance >> 8));
+	write_eeprom(EEP_INSTANCE3, (U8_T)(Instance >> 16));
+	write_eeprom(EEP_INSTANCE4, (U8_T)(Instance >> 24));
+
+}
+
+void Store_MASTER_To_Eeprom(uint8_t master)
+{
+	write_eeprom(EEP_MAX_MASTER,master);
+}
+	
+char get_current_mstp_port(void)
+{
+	return 2;
+}
+
+BACNET_POLARITY Binary_Output_Polarity(
+		uint32_t instance)
+{}
+
+bool Binary_Output_Polarity_Set(
+	uint32_t object_instance,
+	BACNET_POLARITY polarity)
+{}
+	
+U8_T Get_current_panel(void)
+{}
+
+U8_T MAX_MASTER;
+//void handler_timesync(void)
+//{
+
+//}
+
+//void handler_timesync_utc(void)
+//{
+
+//}
+
+
+
+
+
+
 
 //------------------------------------------------------------

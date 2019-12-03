@@ -22,7 +22,14 @@
 #include "bacnet.h"
 #include "rs485.h"
 #include "stmflash.h"
+#include "ProductModel.h"
+#include "pid.h"
+#include "bsp_esp8266.h"
 
+uint8 schedule_change = 0;
+uint16 event[7];
+uint16 event_temp[7];
+uint8 occ_flag = 0;
 uint16_t flash_buf[2];
 extern Wr_one_day wr_times[MAX_WR][MAX_SCHEDULES_PER_WEEK];
 
@@ -39,7 +46,7 @@ uint8 pre_fanspeed = 0;
 uint8 fanspeedbuf = 0;
 uint8 cooltest;
 uint8 out6buf;
-extern int16 ctest[10]; 
+//extern int16 ctest[10]; 
 uint8 scheduleoff;
 uint8 faninflag = 0;
 uint8  buffer_occupied;
@@ -237,7 +244,13 @@ void InitialRAM(void)
 		else
 				b.eeprom[i] = temp;
 		}
+		
+	if(Hum_Tcalibration == 0xff)
+		Hum_Tcalibration = 0;
+	Hum_T_calibration = (int8)Hum_Tcalibration;
+		
 	//if ID which store in EEPROM is 0xff or 0, use backup ID which store in flash.
+		
 	STMFLASH_Read(FLASH_MODBUS_ID, flash_buf, 2);
 	temp = flash_buf[0];		
   if((laddress == 0xff) || (laddress == 0))
@@ -414,60 +427,60 @@ void InitialRAM(void)
 			Hardware_Info_LO = 1;			
 		}	
 
-		if(ScheduleMondayEvent1(0) == 0xff)//if the first event value = 0xff, schedule table need to be initialized
+		if(ScheduleDay(0) == 0xff)//if the first event value = 0xff, schedule table need to be initialized
 		{
-			
-			for(i=0;i<7;i++)
-			{
-				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT1_H + i*12, 6);
-				ScheduleMondayEvent1(i*12) = 6;
-				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT1_H + i*12 + 1, 0);
-				ScheduleMondayEvent1(i*12 + 1) = 0;
-			}
-			
-			for(i=0;i<7;i++)
-			{
-				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT2_H + i*12, 9);
-				ScheduleMondayEvent2(i*12) = 9;
-				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT2_H + i*12 + 1, 0);
-				ScheduleMondayEvent2(i*12 + 1) = 0;
-			}
-			
-			for(i=0;i<7;i++)
-			{
-				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT3_H + i*12, 18);
-				ScheduleMondayEvent3(i*12) = 18;
-				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT3_H + i*12 + 1, 0);
-				ScheduleMondayEvent3(i*12 + 1) = 0;
-			}
-			
-			for(i=0;i<7;i++)
-			{
-				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT4_H + i*12, 21);
-				ScheduleMondayEvent4(i*12) = 22;
-				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT4_H + i*12 + 1, 0);
-				ScheduleMondayEvent4(i*12 + 1) = 0;
-			}
-			for(i=0;i<7;i++)
-			{
-				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT5_H + i*12, 0);
-				ScheduleMondayEvent5(i*12) = 0;
-				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT5_H + i*12 + 1, 0);
-				ScheduleMondayEvent5(i*12 + 1) = 0;
-			}
-			for(i=0;i<7;i++)
-			{
-				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT6_H + i*12, 0);
-				ScheduleMondayEvent6(i*12) = 0;
-				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT6_H + i*12 + 1, 0);
-				ScheduleMondayEvent6(i*12 + 1) = 0;
-			}
-			
-			for(i=0;i<(EEP_SCHEDULE_HOLIDAY_FLAG - EEP_SCHEDULE_MONDAY_FLAG + 2);i++)
-			{
-				write_eeprom(EEP_SCHEDULE_MONDAY_FLAG+i, 0);
-				ScheduleMondayFlag(i) = 0;				
-			}
+//			
+//			for(i=0;i<7;i++)
+//			{
+//				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT1_H + i*12, 6);
+//				ScheduleMondayEvent1(i*12) = 6;
+//				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT1_H + i*12 + 1, 0);
+//				ScheduleMondayEvent1(i*12 + 1) = 0;
+//			}
+//			
+//			for(i=0;i<7;i++)
+//			{
+//				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT2_H + i*12, 9);
+//				ScheduleMondayEvent2(i*12) = 9;
+//				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT2_H + i*12 + 1, 0);
+//				ScheduleMondayEvent2(i*12 + 1) = 0;
+//			}
+//			
+//			for(i=0;i<7;i++)
+//			{
+//				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT3_H + i*12, 18);
+//				ScheduleMondayEvent3(i*12) = 18;
+//				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT3_H + i*12 + 1, 0);
+//				ScheduleMondayEvent3(i*12 + 1) = 0;
+//			}
+//			
+//			for(i=0;i<7;i++)
+//			{
+//				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT4_H + i*12, 21);
+//				ScheduleMondayEvent4(i*12) = 22;
+//				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT4_H + i*12 + 1, 0);
+//				ScheduleMondayEvent4(i*12 + 1) = 0;
+//			}
+//			for(i=0;i<7;i++)
+//			{
+//				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT5_H + i*12, 0);
+//				ScheduleMondayEvent5(i*12) = 0;
+//				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT5_H + i*12 + 1, 0);
+//				ScheduleMondayEvent5(i*12 + 1) = 0;
+//			}
+//			for(i=0;i<7;i++)
+//			{
+//				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT6_H + i*12, 0);
+//				ScheduleMondayEvent6(i*12) = 0;
+//				write_eeprom(EEP_SCHEDULE_MONDAY_EVENT6_H + i*12 + 1, 0);
+//				ScheduleMondayEvent6(i*12 + 1) = 0;
+//			}
+//			
+//			for(i=0;i<(EEP_SCHEDULE_HOLIDAY_FLAG - EEP_SCHEDULE_MONDAY_FLAG + 2);i++)
+//			{
+//				write_eeprom(EEP_SCHEDULE_MONDAY_FLAG+i, 0);
+//				ScheduleMondayFlag(i) = 0;				
+//			}
 			
 			for(i = 0;i<46;i++)
 			{
@@ -476,6 +489,33 @@ void InitialRAM(void)
 			}
 			
 		}
+		
+//		for(i=0;i<8;i++)//Monday to Sunday + holiday
+//		{
+//			for(j=0;j<6;j++)
+//			{
+//				if(get_current_event_flag(i,j) == 0) //if event is null, set relative time to 0.
+//				{
+//					//ScheduleMondayFlag((j%3) + (calendar.week-1)*3) = 0;
+//					ScheduleMondayEvent1(i*12 + j*2) = 0xff;
+//					ScheduleMondayEvent1(i*12 + j*2 + 1) = 0xff;	
+//				}
+//			}
+//		}	
+		Check_All_WR();	//copy the event flags to bacnet event flags	
+//		for(j=0;j<6;j++)
+//		{
+//			if(wr_time_on_off[0][calendar.week-1][j] == 0xff) //there is no event set
+//			{
+//				event[j] = 0;
+//				event_num ++;
+//				
+//				ScheduleMondayFlag((j%3) + (calendar.week-1)*3) = 0;
+//				ScheduleMondayEvent1((calendar.week-1)*12 + j*2) = 0;
+//  			ScheduleMondayEvent1((calendar.week-1)*12 + j*2 + 1) = 0;	
+//			  
+//			}
+//		}		
 	
 
 		if(RS485_Mode >2)
@@ -484,7 +524,7 @@ void InitialRAM(void)
 		if(protocol_select > 1)
 		{
 			protocol_select = 0;
-			modbus.com_config[0] = MODBUS;
+			Modbus.com_config[0] = MODBUS;
 		}
 		
 		if(Pir_Sensetivity == 0xff)//pir sensetivity not ini
@@ -518,19 +558,21 @@ void InitialRAM(void)
 		{	
 			Instance = SerialNumber(0);
 			Instance |= SerialNumber(1) << 8;
-//			Instance |= SerialNumber(2) << 16;
-//			Instance |= SerialNumber(3) << 24;
+			Instance |= SerialNumber(2) << 16;
+			Instance |= SerialNumber(3) << 24;
 			
 		}
 		else
 		{
 			Instance = read_eeprom(EEP_INSTANCE1);
-			Instance |= read_eeprom(EEP_INSTANCE2) << 8;
+			Instance |= (uint32)read_eeprom(EEP_INSTANCE2) << 8;
+			Instance |= (uint32)read_eeprom(EEP_INSTANCE3) << 16;
+			Instance |= (uint32)read_eeprom(EEP_INSTANCE4) << 24;
 		}
 		// wr_times[MAX_WR][MAX_SCHEDULES_PER_WEEK];
-		for(i=0;i<7;i++)
+		for(i=0;i<8;i++)
 		{
-			for(j=0;j<8;j++)
+			for(j=0;j<6;j++)
 			{
 				if(ScheduleMondayEvent1(i*12 + j*2) > 24)
 					wr_times[0][i].time[j].hours = 0;
@@ -600,11 +642,54 @@ void InitialRAM(void)
 //	wr_times[0][0].time[7].hours = 22;//ScheduleMondayEvent1(8);
 //	wr_times[0][0].time[7].minutes = 13;//ScheduleMondayEvent1(9);	
 			
+	for(i=0;i<MAX_OUTS;i++)
+		for(j=0;j<16;j++)
+			output_priority[i][j] = 0xff;
 		
+	if(Modbus.com_config[0] == MODBUS )	
+	{
+		for(i=0;i<5;i++)
+			if(GetByteBit(&EEP_OutputManuEnable,i))
+				output_priority[i][7] = GetByteBit(&ManualRelayAll, i);
+			
+		if(GetByteBit(&EEP_OutputManuEnable,5))
+			output_priority[5][7] = (int16)(ManualAO1_HI << 8) + ManualAO1_LO;	
+		if(GetByteBit(&EEP_OutputManuEnable,6))
+			output_priority[6][7] = (int16)(ManualAO2_HI << 8) + ManualAO2_LO;	
 		
-		
-		
-
+	}
+	
+	if((ICON_ManualMode == 0xff) && (ICON_ManualValue == 0xff))
+	{
+		ICON_ManualMode = 0;
+		ICON_ManualValue = 0;
+		write_eeprom(EEP_ICON_MANUAL_MODE, 0);
+		write_eeprom(EEP_ICON_MANUAL_VALUE, 0);
+	}
+	#ifdef TSTAT7_ARM
+	if(ProductModel != PM_TSTAT7_ARM)
+		write_eeprom(EEP_PRODUCT_MODEL, PM_TSTAT7_ARM);
+	#elif defined TSTAT9 
+	if(ProductModel != PM_TSTAT9)
+		write_eeprom(EEP_PRODUCT_MODEL, PM_TSTAT9);
+	#else
+	if(ProductModel != PM_TSTAT8)
+	  write_eeprom(EEP_PRODUCT_MODEL, PM_TSTAT8);
+	#endif	
+	
+	 if( EEP_TempSelect == PID_DELTA_TEMPERATURE)		
+	{
+		SetpointUNLimit = 1;
+		write_eeprom(EEP_SETPOINT_UNLIMIT,SetpointUNLimit);
+	}
+	 if( EEP_Input1Select == PID_DELTA_TEMPERATURE)		
+	{
+		SetpointUNLimit = 1;
+		write_eeprom(EEP_SETPOINT_UNLIMIT,SetpointUNLimit);
+	}
+	
+	co2_autocal_disable = read_eeprom(EEP_CO2_AUTOCAL_SW);
+	
 }
 
 
@@ -825,6 +910,12 @@ uint16 i;
 		}
 	}
 	#endif //nTstat7	
+	
+	for(i=0;i<7;i++)
+			write_eeprom((EEP_OUTPUT1_DELAY_OFF_TO_ON + i), 0);	  
+	for(i=0;i<7;i++)
+			write_eeprom((EEP_OUTPUT1_DELAY_ON_TO_OFF + i), 0);	
+	
 	
 }
 
@@ -1253,7 +1344,16 @@ void increase_cooling_setpoint(void)
 	if((schedule_on_off == SCHEDULE_OFF)&&(fan_speed_user == FAN_OFF))
 	{
 		setpoint_buf = EEP_NightSpHi * 256 + EEP_NightSpLo;
-		setpoint_buf += EEP_SetpointIncrease;
+		if(EEP_SetpointIncrease == 10)
+		{
+			if((setpoint_buf %10) != 0)
+			{
+				setpoint_buf -= setpoint_buf % 10;
+				setpoint_buf += EEP_SetpointIncrease;
+			}
+		}
+		else
+			setpoint_buf += EEP_SetpointIncrease;
 		if(SetpointUNLimit == SPLIMIT)
 			if( setpoint_buf	> (int16)EEP_MaxSetpoint*10) 
 				setpoint_buf	= (int16)EEP_MaxSetpoint*10;
@@ -1282,7 +1382,7 @@ void increase_cooling_setpoint(void)
 	
   blink_flag = BLINK_OFF;
   sp_blink_timer = 5;	
-	icon.setpoint = 1;	
+	//icon.setpoint = 1;	
 }
 
 
@@ -1294,7 +1394,17 @@ void decrease_cooling_setpoint(void)
 	if((schedule_on_off == SCHEDULE_OFF)&&(fan_speed_user == FAN_OFF))
 	{
 		setpoint_buf = EEP_NightSpHi * 256 + EEP_NightSpLo;//loop_setpoint[0];
-		setpoint_buf -= EEP_SetpointIncrease;
+		
+		if(EEP_SetpointIncrease == 10)
+		{
+			if((setpoint_buf %10) != 0)
+			{
+				setpoint_buf -= setpoint_buf % 10;
+				setpoint_buf -= EEP_SetpointIncrease;
+			}
+		}
+		else
+			setpoint_buf -= EEP_SetpointIncrease;
 		if(SetpointUNLimit == SPLIMIT)
 			if( setpoint_buf	< (int16)EEP_MinSetpoint*10) 
 				setpoint_buf	= (int16)EEP_MinSetpoint*10;
@@ -1326,7 +1436,7 @@ void decrease_cooling_setpoint(void)
 //	init_PID_flag |= 0x01;	
 	blink_flag = BLINK_OFF;
   sp_blink_timer = 5;
-	icon.setpoint = 1;	
+	//icon.setpoint = 1;	
 }
 
 
@@ -1367,25 +1477,26 @@ void accept_fan_setting(void)
 	}
 	pre_fanspeed = fan_speed_user;
 	icon.occ_unocc = 1;
-	icon.setpoint = 1;
+	//icon.setpoint = 1;
 }
 
 void increase_fan_speed(void)
 {
-
-//	fanspeedbuf = fan_speed_user;
-//	if((fanspeedbuf == FAN_OFF)&&(faninflag == 0))
-//	{
+	uint8 i;
+	
 		faninflag = 1; 
-//		fan_blink_timer = 4;
-//		fanspeedbuf++;
-//		//return;
-//	}
-//	else
+  if(fanspeedbuf < FAN_AUTO)
 		fanspeedbuf++;
 	
 	if(fanspeedbuf > FAN_AUTO)
+	{
+		for(i=0;i<8;i++)
+		 if(AI_Function(i) == AI_FUNCTION_OCCSENSOR || AI_Function(i) == AI_FUNCTION_CLOCK)//occupancy mode
+			occ_flag = 1;
+		
 		fanspeedbuf = FAN_OFF;
+		
+	}
 	
 	if(fanspeedbuf > EEP_FanMode)
 			fanspeedbuf = FAN_AUTO;
@@ -1400,17 +1511,51 @@ void increase_fan_speed(void)
 	fan_flag = 1;
 	display_fanspeed(fanspeedbuf);
 	fan_flag = 0;
-	icon.fan = 1;
+//	icon.fan = 1;
 	
 	
 }	
 
+
+void decrease_fan_speed(void)
+{
+	uint8 i;
+	
+	faninflag = 1; 
+   
+	if(fanspeedbuf > FAN_OFF)
+		fanspeedbuf--;
+	
+//	if(fanspeedbuf == FAN_OFF)
+//	{
+//		for(i=0;i<8;i++)
+//		 if(AI_Function(i) == AI_FUNCTION_OCCSENSOR || AI_Function(i) == AI_FUNCTION_CLOCK)//occupancy mode
+//			occ_flag = 1;
+//		
+//		fanspeedbuf = FAN_OFF;
+//		
+//	}
+	
+	if(fanspeedbuf > EEP_FanMode)
+			fanspeedbuf = EEP_FanMode;
+	
+	blink_flag = BLINK_OFF;
+  fan_blink_timer = 4;
+	fan_flag = 1;
+	display_fanspeed(fanspeedbuf);
+	fan_flag = 0;
+	//icon.fan = 1;
+
+}
+	
+
 void increase_sysmode(void)
 {
-	icon.sysmode = 1;
+	//icon.sysmode = 1;
 	if(EEP_HeatCoolConfig == HC_CTL_USER)
 	{
-		heat_cool_user++;
+		if(heat_cool_user < HC_CFG_HEAT)
+			heat_cool_user++;
 		if((EEP_HEAT_TABLE1 == 0)&&(heat_cool_user == HC_CFG_HEAT))//no heating stage
 			heat_cool_user = HC_CFG_AUTO;
 		if((EEP_COOL_TABLE1 == 0)&&(heat_cool_user == HC_CFG_COOL))//no heating stage
@@ -1424,6 +1569,77 @@ void increase_sysmode(void)
 }
 
 
+
+
+void decrease_sysmode(void)
+{
+	//icon.sysmode = 1;
+	if(EEP_HeatCoolConfig == HC_CTL_USER)
+	{
+		if(heat_cool_user > HC_CFG_AUTO)
+			heat_cool_user--;
+		if((EEP_HEAT_TABLE1 == 0)&&(heat_cool_user == HC_CFG_HEAT))//no heating stage
+			heat_cool_user = HC_CFG_AUTO;
+		if((EEP_COOL_TABLE1 == 0)&&(heat_cool_user == HC_CFG_COOL))//no cooling stage
+			heat_cool_user = HC_CFG_AUTO;		
+//		if(heat_cool_user > HC_CFG_HEAT)
+//			heat_cool_user = HC_CFG_AUTO;
+		write_eeprom(EEP_HC_USER, heat_cool_user);
+	}
+	blink_flag = BLINK_OFF;
+  hc_blink_timer = 4;
+
+}
+
+
+#define item_color   0x3CEF
+//uint16 item_color = 0x7e17;
+void Selectitem_up(void)
+{
+	if(current_item == 1)
+	{
+		disp_str(FORM15X30, SCH_XPOS,  SETPOINT_POS,  "SET",SCH_COLOR,item_color);//TSTAT8_BACK_COLOR
+		disp_str(FORM15X30, SCH_XPOS,FAN_MODE_POS,"FAN",SCH_COLOR,TSTAT8_BACK_COLOR);
+		disp_str(FORM15X30, SCH_XPOS,  SYS_MODE_POS,  "SYS",SCH_COLOR,TSTAT8_BACK_COLOR);
+	}
+	else if(current_item == 2)
+	{
+		disp_str(FORM15X30, SCH_XPOS,  SETPOINT_POS,  "SET",SCH_COLOR,TSTAT8_BACK_COLOR);//TSTAT8_BACK_COLOR
+		disp_str(FORM15X30, SCH_XPOS,FAN_MODE_POS,"FAN",SCH_COLOR,item_color);
+		disp_str(FORM15X30, SCH_XPOS,  SYS_MODE_POS,  "SYS",SCH_COLOR,TSTAT8_BACK_COLOR);
+	}
+	else if(current_item == 3)
+	{
+		disp_str(FORM15X30, SCH_XPOS,  SETPOINT_POS,  "SET",SCH_COLOR,TSTAT8_BACK_COLOR);//TSTAT8_BACK_COLOR
+		disp_str(FORM15X30, SCH_XPOS,FAN_MODE_POS,"FAN",SCH_COLOR,TSTAT8_BACK_COLOR);
+		disp_str(FORM15X30, SCH_XPOS,  SYS_MODE_POS,  "SYS",SCH_COLOR,item_color);
+	}
+}
+
+void Selectitem_down(void)
+{
+	if(current_item == 1)
+	{
+		disp_str(FORM15X30, SCH_XPOS,  SETPOINT_POS,  "SET",SCH_COLOR,item_color);//TSTAT8_BACK_COLOR
+		disp_str(FORM15X30, SCH_XPOS,FAN_MODE_POS,"FAN",SCH_COLOR,TSTAT8_BACK_COLOR);
+		disp_str(FORM15X30, SCH_XPOS,  SYS_MODE_POS,  "SYS",SCH_COLOR,TSTAT8_BACK_COLOR);
+	}
+	else if(current_item == 2)
+	{
+		disp_str(FORM15X30, SCH_XPOS,  SETPOINT_POS,  "SET",SCH_COLOR,TSTAT8_BACK_COLOR);//TSTAT8_BACK_COLOR
+		disp_str(FORM15X30, SCH_XPOS,FAN_MODE_POS,"FAN",SCH_COLOR,item_color);
+		disp_str(FORM15X30, SCH_XPOS,  SYS_MODE_POS,  "SYS",SCH_COLOR,TSTAT8_BACK_COLOR);
+	}
+	else if(current_item == 3)
+	{
+		disp_str(FORM15X30, SCH_XPOS,  SETPOINT_POS,  "SET",SCH_COLOR,TSTAT8_BACK_COLOR);//TSTAT8_BACK_COLOR
+		disp_str(FORM15X30, SCH_XPOS,FAN_MODE_POS,"FAN",SCH_COLOR,TSTAT8_BACK_COLOR);
+		disp_str(FORM15X30, SCH_XPOS,  SYS_MODE_POS,  "SYS",SCH_COLOR,item_color);
+	}
+}
+
+
+
 void decrease_parameter(void ) 
 {
 clear_line(2);
@@ -1432,7 +1648,7 @@ clear_line(2);
 	  	{
 			if(item_to_adjust == EEP_POWERUP_SETPOINT)
 				{
-				if(read_eeprom(EEP_SETPOINT_UNLIMIT) == SPUNLIMIT)
+				if(SetpointUNLimit == SPUNLIMIT)
 				if(menubuffer.new_parameter > EEP_MinSetpoint && menubuffer.new_parameter > parameter_array[EEP_DEGCorF][ EEP_POWERUP_SETPOINT  - MAXEEPCONSTRANGE ][LOWER])
 					{
 					menubuffer.new_parameter-- ;
@@ -1446,7 +1662,7 @@ clear_line(2);
 				}
 			else  //item_to_adjust == EEP_MAX_SETPOINT
 				{
-				if(read_eeprom(EEP_SETPOINT_UNLIMIT) == SPUNLIMIT)
+				if(SetpointUNLimit == SPUNLIMIT)
 					{
 					menubuffer.new_parameter--;
 //					show_parameter() ;
@@ -1616,7 +1832,7 @@ void increase_parameter(void)
 
 		  if(item_to_adjust == EEP_POWERUP_SETPOINT ||  item_to_adjust == EEP_MIN_SETPOINT) 	// add shi ,slo
 		  	{
-					if(read_eeprom(EEP_SETPOINT_UNLIMIT) == SPLIMIT)
+					if(SetpointUNLimit == SPLIMIT)
 						{
 						if(item_to_adjust == EEP_POWERUP_SETPOINT)
 							{
@@ -1795,6 +2011,8 @@ void accept_parameter(void)
 				flash_buf[0] = laddress;	
 				STMFLASH_Write(FLASH_MODBUS_ID, flash_buf, 1);
 				Station_NUM = laddress;
+				update_flag = 12;
+			 // Inital_Bacnet_Server();
 		}
 
 		
@@ -1931,66 +2149,66 @@ void accept_parameter(void)
 				{
 					EEP_Baudrate = BAUDRATE_9600;
 					uart1_init(9600);
-					modbus.baudrate = 9600;
+					Modbus.baudrate = 9600;
 				}
 				else if(menubuffer.new_parameter == BAUDRATE_19200)
 				{
 					EEP_Baudrate = BAUDRATE_19200;
 					uart1_init(19200);
-					modbus.baudrate = 19200;					
+					Modbus.baudrate = 19200;					
 				}
 				else if(menubuffer.new_parameter == BAUDRATE_38400)
 				{
 					EEP_Baudrate = BAUDRATE_38400;
 					uart1_init(38400);
-					modbus.baudrate = 38400;					
+					Modbus.baudrate = 38400;					
 				}
 				else if(menubuffer.new_parameter == BAUDRATE_57600)
 				{
 					EEP_Baudrate = BAUDRATE_57600;
 					uart1_init(57600);
-					modbus.baudrate = 57600;					
+					Modbus.baudrate = 57600;					
 				}
 				else if(menubuffer.new_parameter == BAUDRATE_115200)
 				{
 					EEP_Baudrate = BAUDRATE_115200;
 					uart1_init(115200);
-					modbus.baudrate = 115200;					
+					Modbus.baudrate = 115200;					
 				}
 				
 				else if(menubuffer.new_parameter == BAUDRATE_76800)
 				{
 					EEP_Baudrate = BAUDRATE_76800;
 					uart1_init(76800);
-					modbus.baudrate = 76800;					
+					Modbus.baudrate = 76800;					
 				}		
 
 				else if(menubuffer.new_parameter == BAUDRATE_1200)
 				{
 					EEP_Baudrate = BAUDRATE_1200;
 					uart1_init(1200);
-					modbus.baudrate = 1200;					
+					Modbus.baudrate = 1200;					
 				}	
 
 				else if(menubuffer.new_parameter == BAUDRATE_4800)
 				{
 					EEP_Baudrate = BAUDRATE_4800;
 					uart1_init(4800);
-					modbus.baudrate = 4800;					
+					Modbus.baudrate = 4800;					
 				}	
 
 				else if(menubuffer.new_parameter == BAUDRATE_14400)
 				{
 					EEP_Baudrate = BAUDRATE_14400;
 					uart1_init(14400);
-					modbus.baudrate = 14400;					
+					Modbus.baudrate = 14400;					
 				}					
 				serial_restart();
 //				else
 //				{
 //					EEP_Baudrate = BAUDRATE_115200;
 //					uart1_init(115200);
-//					modbus.baudrate = 115200;			
+//					Modbus.baudrate = 115200;			
 //				}				
 //				write_eeprom(EEP_BAUDRATE, menubuffer.new_parameter);
 				//DisRestart( );
@@ -2056,14 +2274,17 @@ void accept_parameter(void)
 				{
 						if((menubuffer.new_parameter%2) == 1)//bacnet protocol
 						{
-							modbus.com_config[0] = BAC_MSTP;
+							Modbus.com_config[0] = BAC_MSTP;
+							protocol_select = 1;
+							Check_All_WR();
 							Recievebuf_Initialize(0);
 							write_eeprom(EEP_PROTOCOL_SEL,1);					
 							write_eeprom(EEP_RS485_MODE,0);
 						}
 						else //modbus protocol
 						{
-							modbus.com_config[0] = MODBUS;
+							Modbus.com_config[0] = MODBUS;
+							protocol_select = 0;
 							write_eeprom(EEP_PROTOCOL_SEL,0);
 							update_flag = 4;
 						}
@@ -2532,7 +2753,7 @@ clear_lines();
 
 	else if(item_to_adjust == EEP_PROTOCOL_SEL)	
 	{
-		if(modbus.com_config[0] == BAC_MSTP)
+		if(Modbus.com_config[0] == BAC_MSTP)
 			menubuffer.new_parameter = 1;
 		else
 			menubuffer.new_parameter = 0;
@@ -2593,15 +2814,35 @@ void DealWithKey(uint8 key_id)
 		break ;
 
 		case INCREASE_FAN_SPEED	:
-		 		  
-			increase_fan_speed() ;
+//		 	if(EEP_SpecialMenuLock != 5)	  
+				increase_fan_speed() ;
+		break;
+		
+		case T8_DECREASE_FAN_SPEED	:
+//		 	if(EEP_SpecialMenuLock != 5)	  
+				decrease_fan_speed() ;
+		break;
+		
+		case SELECT_ITEM_UP:
+			  Selectitem_up();
 		break;
 
+		case SELECT_ITEM_DOWN:
+			  Selectitem_down();
+		break;		
+		
 		case INCREASE_SYS_MODE://DECREASE_FAN_SPEED:
-	 		increase_sysmode() ;  
+			if(EEP_SpecialMenuLock != 5)	
+				increase_sysmode() ;  
 			//decrease_fan_speed();
 		break ;
 
+		case DECREASE_SYS_MODE://DECREASE_FAN_SPEED:
+			if(EEP_SpecialMenuLock != 5)	
+				decrease_sysmode() ;  
+			//decrease_fan_speed();
+		break ;			
+			
 		case START_MENU_MODE :
 			clear_lines();
 				
@@ -2611,7 +2852,7 @@ void DealWithKey(uint8 key_id)
 				part_lock = 0;
 			  start_menu_mode();
 			}
-			else if(EEP_SpecialMenuLock == 2 || EEP_SpecialMenuLock == 3)
+			else if(EEP_SpecialMenuLock == 2 || EEP_SpecialMenuLock == 3 || EEP_SpecialMenuLock == 5)
 			{
 				start_menu_mode();
 				part_lock = 1 ;
@@ -2900,7 +3141,7 @@ int16 CalculateTemperatureCompensation(int16 hummity_back,int16 temp_back )
 //RHcompensatedT = RHactualT + (25 - Tactual) * CoeffTemp    
  int16 get_rh=0;
  get_rh = hummity_back + (-0.15) * (250 - temp_back);
-// ctest1 = (-0.15) * (250 - temp_back);
+
  //get_rh=(((signed int32)B1*hummity_back+13250)*(temp_back/10)-((signed int32)B3*hummity_back+308760))/10000; 
  return get_rh;   
 }
@@ -3083,12 +3324,7 @@ uint8 cal_holiday(void)
 		return 0;
 }
 
-#define EVENT_NULL    0
-#define EVENT_DHOME   1
-#define EVENT_WORK    2
-//#define EVENT_NHOME   3
-#define EVENT_SLEEP   3
-#define EVENT_AWAY    4
+
 
 void event_dealwith(uint8 event_type)
 {
@@ -3216,52 +3452,199 @@ int8 get_event_flag(uint8 event,uint8 type)//day = 0: normal day   =1: holiday
 
 
 
+
+
 void RunSchedule(void)
 {
 	uint32 currentnum;
-	uint16 event1, event2,event3,event4,event5,event6;
+	// event2,event3,event4,event5,event6;
+	
 	uint8 event_type;
-	uint8 temp;
-
+	uint8 flag_change = 0;
+	uint8 m,j,k;
+	uint8 event_num = 0;
+	uint8 flag_temp1,flag_temp2;
+	uint8 day;
+	uint8 time_temp;
+	
+	Check_All_WR();
+	
 	if(calendar.week == 0)//sunday
-		temp = 6;
+		day = 6;
 	else
-		temp = calendar.week - 1;
+		day = calendar.week - 1;
 
+
+	
 	if(cal_holiday())//if it is holiday
 	{
-		event1 = ScheduleHolidayEvent1(0) * 60 + ScheduleHolidayEvent1(1);
-		event2 = ScheduleHolidayEvent2(0) * 60 + ScheduleHolidayEvent2(1);
-		event3 = ScheduleHolidayEvent3(0) * 60 + ScheduleHolidayEvent3(1);
-		event4 = ScheduleHolidayEvent4(0) * 60 + ScheduleHolidayEvent4(1);
-		event5 = ScheduleHolidayEvent5(0) * 60 + ScheduleHolidayEvent5(1);
-		event6 = ScheduleHolidayEvent6(0) * 60 + ScheduleHolidayEvent6(1);
+		event[0] = ScheduleHolidayEvent1(0) * 60 + ScheduleHolidayEvent1(1);
+		event[1] = ScheduleHolidayEvent2(0) * 60 + ScheduleHolidayEvent2(1);
+		event[2] = ScheduleHolidayEvent3(0) * 60 + ScheduleHolidayEvent3(1);
+		event[3] = ScheduleHolidayEvent4(0) * 60 + ScheduleHolidayEvent4(1);
+		event[4] = ScheduleHolidayEvent5(0) * 60 + ScheduleHolidayEvent5(1);
+		event[5] = ScheduleHolidayEvent6(0) * 60 + ScheduleHolidayEvent6(1);
+
+event_num = 0;
+
+		for(j=0;j<6;j++)
+		{
+			if(wr_time_on_off[0][day][j] == 0xff) //there is no event set
+			{
+				
+
+				event[j] = 0xffff;
+				event_num ++;
+				flag_temp1 = ScheduleMondayFlag(j/2 + day*3);
+				flag_temp2 = flag_temp1;
+				if(j%2 == 0)//low byte
+				{
+					flag_temp1 &= 0x03;
+				}
+				else
+				{
+					flag_temp1 = flag_temp1 >>3;
+					flag_temp1 &= 0x03;
+				}
+				if(flag_temp1 != 0)
+				{
+					if(j%2 == 0)//low bits
+						flag_temp2 &= 0xf8;
+		      else
+						flag_temp2 &= 0xc7;
+					
+					ScheduleMondayEvent1(day*12+j*2) = 0xff;
+					ScheduleMondayEvent1(day*12+j*2+1) = 0xff;
+					
+					write_eeprom(EEP_SCHEDULE_MONDAY_EVENT1_H+day*12+j*2, 0xff);
+					write_eeprom(EEP_SCHEDULE_MONDAY_EVENT1_H+day*12+j*2+1, 0xff);	
+
+					ScheduleMondayFlag(j/2 + day*3) = flag_temp2;
+					write_eeprom(EEP_SCHEDULE_MONDAY_FLAG+(j/2) + day*3, flag_temp2);
+					
+				}
+				
+//				if(j%2 == 0)//low byte
+//					ScheduleMondayFlag((j%3) + (calendar.week-1)*3) = 0;
+//				else //high byte
+//					ScheduleMondayFlag((j%3) + (calendar.week-1)*3) = 0;
+				
+//				ScheduleMondayEvent1((calendar.week-1)*12 + j*2) = 0;
+//  			ScheduleMondayEvent1((calendar.week-1)*12 + j*2 + 1) = 0;	
+			  
+			}
+		}
+
 		
+		if(schedule_change)
+		{
+			
+			for(j=0;j<6;j++)
+			{
+				event_temp[j] = event[j];
+			}
+			
+			m = 5;//event_num-1;
+			for(j=0;j<6;j++)
+			{
+				for(k=0;k<m;k++)
+				{
+					if(event_temp[k] > event_temp[k+1])
+					{
+						flag_change = 1;
+						event_temp[6] = event_temp[k];
+						event_temp[k] = event_temp[k+1];
+						event_temp[k+1] = event_temp[6];
+						
+						time_temp = wr_time_on_off[0][day][k];
+						wr_time_on_off[0][day][k] = wr_time_on_off[0][day][k+1];
+						wr_time_on_off[0][day][k+1] = time_temp;
+					}				
+				}
+				m--;
+			}			
+			
+			schedule_change = 0;
+	  }
+		
+
+		if(flag_change)
+		{
+			for(j=0;j<6;j++)
+			{
+				//wr_time_on_off[0][day][j] = value;
+
+				flag_temp1 = ScheduleMondayFlag(j/2 + day*3);
+				
+				if(j%2 == 0)//low event
+				{
+					if(wr_time_on_off[0][day][j] == 1)
+					{
+						flag_temp1 &= 0xf8;
+						flag_temp1 |= EVENT_DHOME;
+					}
+					else if(wr_time_on_off[0][day][j] == 0)
+					{
+						flag_temp1 &= 0xf8;
+						flag_temp1 |= EVENT_WORK;
+					}
+					else if(wr_time_on_off[0][day][j] == 0xff)
+					{
+						flag_temp1 &= 0xf8;
+						flag_temp1 |= EVENT_NULL;
+					}
+				}
+				else
+				{
+					if(wr_time_on_off[0][day][j] == 1)
+					{
+						flag_temp1 &= 0xc7;
+						flag_temp1 |= (EVENT_DHOME<<3);
+					}
+					else if(wr_time_on_off[0][day][j] == 0)
+					{	
+						flag_temp1 &= 0xc7;
+						flag_temp1 |= (EVENT_WORK<<3);
+					}
+					else if(wr_time_on_off[0][day][j] == 0xff)
+					{
+						flag_temp1 &= 0xc7;
+						flag_temp1 |= (EVENT_NULL<<3);	
+					}
+				}
+				
+				ScheduleMondayFlag(j/2 + day*3) = flag_temp1;
+				write_eeprom(EEP_SCHEDULE_MONDAY_FLAG+(j/2) + day*3, flag_temp1);	
+			}			
+			flag_change = 0;
+		}		
+			
+
    	currentnum = calendar.hour * 60 + calendar.min;
 		
-		if((currentnum >= event1) && (currentnum < event2))//event1 triggered 
+		if(currentnum >= event_temp[0] && (currentnum < event_temp[1]))//event1 triggered 
 		{
 			event_type = get_event_flag(EVENT1, SCHEDULE_HOLIDAY);
 		}
-		else if((currentnum >= event2) && (currentnum < event3))//event2
+	 if((currentnum >= event_temp[1]) && (currentnum < event_temp[2]))//event2
 		{
 			event_type = get_event_flag(EVENT2, SCHEDULE_HOLIDAY);
 			
 		}	
-		else if((currentnum >= event3) && (currentnum < event4))//event3
+	 if((currentnum >= event_temp[2]) && (currentnum < event_temp[3]))//event3
 		{
 			event_type = get_event_flag(EVENT3, SCHEDULE_HOLIDAY);
 		}	
-		else if((currentnum >= event4) && (currentnum < event5))//event4
+	 if((currentnum >= event_temp[3]) && (currentnum < event_temp[4]))//event4
 		{
 			event_type = get_event_flag(EVENT4, SCHEDULE_HOLIDAY);
 		}	
 		
-		else if((currentnum >= event5) && (currentnum < event6))//event5
+	 if((currentnum >= event_temp[4]) && (currentnum < event_temp[5])) //event5
 		{
 			event_type = get_event_flag(EVENT5, SCHEDULE_HOLIDAY);
 		}	
-		else //if(currentnum >= event6) 
+		if(currentnum >= event_temp[5])
 		{
 			event_type = get_event_flag(EVENT6, SCHEDULE_HOLIDAY);
 		}
@@ -3269,38 +3652,182 @@ void RunSchedule(void)
 	}	
 	else
 	{
-		event1 = ScheduleMondayEvent1(0 + temp*12) * 60 + ScheduleMondayEvent1(1 + temp*12);
-		event2 = ScheduleMondayEvent2(0 + temp*12) * 60 + ScheduleMondayEvent2(1+ temp*12);
-		event3 = ScheduleMondayEvent3(0+ temp*12) * 60 + ScheduleMondayEvent3(1+ temp*12);
-		event4 = ScheduleMondayEvent4(0+ temp*12) * 60 + ScheduleMondayEvent4(1+ temp*12);
-		event5 = ScheduleMondayEvent5(0+ temp*12) * 60 + ScheduleMondayEvent5(1+ temp*12);
-		event6 = ScheduleMondayEvent6(0+ temp*12) * 60 + ScheduleMondayEvent6(1+ temp*12);
+		event[0] = ScheduleMondayEvent1(0 + day*12) * 60 + ScheduleMondayEvent1(1 + day*12);
+		event[1] = ScheduleMondayEvent2(0 + day*12) * 60 + ScheduleMondayEvent2(1+ day*12);
+		event[2] = ScheduleMondayEvent3(0+ day*12) * 60 + ScheduleMondayEvent3(1+ day*12);
+		event[3] = ScheduleMondayEvent4(0+ day*12) * 60 + ScheduleMondayEvent4(1+ day*12);
+		event[4] = ScheduleMondayEvent5(0+ day*12) * 60 + ScheduleMondayEvent5(1+ day*12);
+		event[5] = ScheduleMondayEvent6(0+ day*12) * 60 + ScheduleMondayEvent6(1+ day*12);
+    
+		event_num = 0;
+
+		for(j=0;j<6;j++)//check if modubs schdule flag is equal to bacnet schedule flag                   
+		{
+			if(wr_time_on_off[0][day][j] == 0xff) //there is no event set
+			{
+				
+
+				event[j] = 0xffff;
+				event_num ++;
+				flag_temp1 = get_current_event_flag(day,j);//ScheduleMondayFlag(j/2 + day*3);
+				flag_temp2 = flag_temp1;
+				if(j%2 == 0)//low byte
+				{
+					flag_temp1 &= 0x03;
+				}
+				else
+				{
+					flag_temp1 = flag_temp1 >>3;
+					flag_temp1 &= 0x03;
+				}
+				if(flag_temp1 != 0)
+				{
+					if(j%2 == 0)//low bits
+						flag_temp2 &= 0xf8;
+		      else
+						flag_temp2 &= 0xc7;
+					
+					ScheduleMondayEvent1(day*12+j*2) = 0xff;
+					ScheduleMondayEvent1(day*12+j*2+1) = 0xff;
+					
+					write_eeprom(EEP_SCHEDULE_MONDAY_EVENT1_H+day*12+j*2, 0xff);
+					write_eeprom(EEP_SCHEDULE_MONDAY_EVENT1_H+day*12+j*2+1, 0xff);	
+
+					ScheduleMondayFlag(j/2 + day*3) = flag_temp2;
+					write_eeprom(EEP_SCHEDULE_MONDAY_FLAG+(j/2) + day*3, flag_temp2);
+					
+				}
+				
+//				if(j%2 == 0)//low byte
+//					ScheduleMondayFlag((j%3) + (calendar.week-1)*3) = 0;
+//				else //high byte
+//					ScheduleMondayFlag((j%3) + (calendar.week-1)*3) = 0;
+				
+//				ScheduleMondayEvent1((calendar.week-1)*12 + j*2) = 0;
+//  			ScheduleMondayEvent1((calendar.week-1)*12 + j*2 + 1) = 0;	
+			  
+			}
+		}
+
+		
+		if(schedule_change)
+		{
+			
+			for(j=0;j<6;j++)
+			{
+				event_temp[j] = event[j];
+			}
+			
+			m = 5;//event_num-1;
+			for(j=0;j<6;j++)
+			{
+				for(k=0;k<m;k++)
+				{
+					if(event_temp[k] > event_temp[k+1])
+					{
+						flag_change = 1;
+						event_temp[6] = event_temp[k];
+						event_temp[k] = event_temp[k+1];
+						event_temp[k+1] = event_temp[6];
+						
+						time_temp = wr_time_on_off[0][day][k];
+						wr_time_on_off[0][day][k] = wr_time_on_off[0][day][k+1];
+						wr_time_on_off[0][day][k+1] = time_temp;
+					}				
+				}
+				m--;
+			}			
+			
+			schedule_change = 0;
+	  }
+		
+
+		if(flag_change)
+		{
+			for(j=0;j<6;j++)
+			{
+				//wr_time_on_off[0][day][j] = value;
+
+				flag_temp1 = ScheduleMondayFlag(j/2 + day*3);
+				
+				if(j%2 == 0)//low event
+				{
+					if(wr_time_on_off[0][day][j] == 1)
+					{
+						flag_temp1 &= 0xf8;
+						flag_temp1 |= EVENT_DHOME;
+					}
+					else if(wr_time_on_off[0][day][j] == 0)
+					{
+						flag_temp1 &= 0xf8;
+						flag_temp1 |= EVENT_WORK;
+					}
+					else if(wr_time_on_off[0][day][j] == 0xff)
+					{
+						flag_temp1 &= 0xf8;
+						flag_temp1 |= EVENT_NULL;
+					}
+				}
+				else
+				{
+					if(wr_time_on_off[0][day][j] == 1)
+					{
+						flag_temp1 &= 0xc7;
+						flag_temp1 |= (EVENT_DHOME<<3);
+					}
+					else if(wr_time_on_off[0][day][j] == 0)
+					{	
+						flag_temp1 &= 0xc7;
+						flag_temp1 |= (EVENT_WORK<<3);
+					}
+					else if(wr_time_on_off[0][day][j] == 0xff)
+					{
+						flag_temp1 &= 0xc7;
+						flag_temp1 |= (EVENT_NULL<<3);	
+					}
+				}
+				
+				ScheduleMondayFlag(j/2 + day*3) = flag_temp1;
+				write_eeprom(EEP_SCHEDULE_MONDAY_FLAG+(j/2) + day*3, flag_temp1);	
+			}			
+			flag_change = 0;
+		}
+		
+//		for(j=0;j<event_num;j++)
+//		{
+//			for(k=0;k<5;k++)
+//				event_temp[k] = event_temp[k+1];	
+//      
+//			event_temp[5] = 0xffff;			
+//		}
+
+		
+		
 		
    	currentnum = calendar.hour * 60 + calendar.min;
 		
-		if((currentnum >= event1) && (currentnum < event2))//event1 triggered 
+		if(currentnum >= event_temp[0] && (currentnum < event_temp[1])) //event1 triggered 
 		{
 			event_type = get_event_flag(EVENT1, SCHEDULE_NORMAL_DAY);
 		}
-		else if((currentnum >= event2) && (currentnum < event3))//event2
+		if((currentnum >= event_temp[1]) && (currentnum < event_temp[2]))//event2
 		{
-			event_type = get_event_flag(EVENT2, SCHEDULE_NORMAL_DAY);
-			
+			event_type = get_event_flag(EVENT2, SCHEDULE_NORMAL_DAY);			
 		}	
-		else if((currentnum >= event3) && (currentnum < event4))//event3
+		if((currentnum >= event_temp[2]) && (currentnum < event_temp[3]))//event3
 		{
 			event_type = get_event_flag(EVENT3, SCHEDULE_NORMAL_DAY);
 		}	
-		else if((currentnum >= event4) && (currentnum < event5))//event4
+		if((currentnum >= event_temp[3]) && (currentnum < event_temp[4]))//event4
 		{
 			event_type = get_event_flag(EVENT4, SCHEDULE_NORMAL_DAY);
 		}	
 		
-		else if((currentnum >= event5) && (currentnum < event6))//event5
+		if((currentnum >= event_temp[4]) && (currentnum < event_temp[5])) //event5
 		{
 			event_type = get_event_flag(EVENT5, SCHEDULE_NORMAL_DAY);
 		}	
-		else //if(currentnum >= event6) 
+		if(currentnum >= event_temp[5]) //event6
 		{
 			event_type = get_event_flag(EVENT6, SCHEDULE_NORMAL_DAY);
 		}
@@ -3410,7 +3937,9 @@ void icon_control_output(uint8 icon_name)
 			}
 			
 		}
-	}		
+	}	
+	 if(IconOutputControl(icon_name) == 0)
+			icon_flag[icon_name] = 100;
 }
 
 
@@ -3485,6 +4014,34 @@ void icon_control_output(uint8 icon_name)
 //	newpid.err_last = newpid.err_next;
 //	newpid.err_next = newpid.err;
 //	return incrementPoint;//*100/ActPoint;
+//}
+
+
+//uint8 cal_ds(uint16 num)//only support unsigned int type value
+//{
+// uint8 a = 0,b=0;
+// uint8 i,j;
+// uint16 temp;
+// uint16 num_temp;
+//	 for(i=0;i<16;i++)
+//		{
+//			num_temp = num >> i;
+//			if(num_temp & 0x01)
+//			{								
+//				for(j=1;j<16-i;j++)
+//					{
+//						temp = (0x01 << j)+1;
+//						if((num_temp & temp) == temp)
+//						{
+//							a = j;
+//							if(a>b)
+//								b = a;
+//							break;
+//						}
+//					}
+//			}				
+//		}
+//	return b;
 //}
 
 

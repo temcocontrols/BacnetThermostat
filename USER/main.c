@@ -60,13 +60,15 @@
 #include "stmflash.h"
 #include "tstat7_lcd.h"
 #include "tstat7_menu.h"
+#include "sht3x.h"
+#include "bsp_esp8266.h"
 
 
 #ifdef TSTAT7_ARM
 et_menu_parameter item_to_adjust;
 #endif
 /************charly's test code*********************/
-extern int16 ctest[10];
+//extern int16 ctest[10];
 //extern uint16 temperature;
 //extern uint16 mul_analog_input[8];
 /***************************************************/
@@ -93,14 +95,15 @@ static void vCOMMTask( void *pvParameters );
 //static void vUpdatePID( void *pvParameters );
 static void vControlLogic( void *pvParameters );
 void vStateSwitch( void *pvParameters );
-void vCoolingLockOut( void *pvParameters );
-void vHeatingLockOut( void *pvParameters );
+void vCoolHeatLockOut( void *pvParameters );
+void vWifitask( void *pvParameters );
+//void vHeatingLockOut( void *pvParameters );
 static void vKeypadsHandle( void *pvParameters );
 //void vDealWithKey(void *pvParameters);
 #ifndef TSTAT7_ARM
 static void vDisplayRefresh( void *pvParameters );
 #endif
-static void vOutputTask( void *pvParameters );
+//static void vOutputTask( void *pvParameters );
 static void vSoftwareTimer( void *pvParameters ); 
 //static void vKEYTask( void *pvParameters );
 //static void vUSBTask( void *pvParameters );
@@ -111,6 +114,7 @@ static void vMSTP_TASK(void *pvParameters ) ;
 //static void vFAN_TASK(void *pvParameters ) ;
 //void uip_polling(void);
 //void EEP_Dat_Init(void) ;
+extern U8_T MAX_MASTER;
 #ifndef TSTAT7_ARM
 extern void  LCDtest(void);
 #endif //TSTAT7_ARM
@@ -133,10 +137,12 @@ void bacnettest(uint8 value)
 void Inital_Bacnet_Server(void)
 {
 //	u32 Instance = 0x1d4c0;
+	Send_I_Am_Flag = 1;
 	Device_Init();
 	Device_Set_Object_Instance_Number(Instance); 
-	SCHEDULES = 1;
-	CALENDARS = 1;
+	SCHEDULES = MAX_WR;
+	CALENDARS = MAX_AR;
+	//Send_I_Am_Flag = 0;
 	
 }
 	
@@ -181,7 +187,7 @@ RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA , ENABLE);//enable GPIO clock
 RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC , ENABLE);//enable GPIO clock	
 RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB , ENABLE);//enable GPIO clock	
 RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOE , ENABLE);//enable GPIO clock	
-//#ifdef TSTAT_OCC
+
 	if(HardwareVersion >= HW_VERSION)
 	{
 	DISP_RS.GPIO_Pin = GPIO_Pin_6;  
@@ -189,7 +195,6 @@ RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOE , ENABLE);//enable GPIO clock
 	DISP_RS.GPIO_Speed = GPIO_Speed_2MHz;	
 	GPIO_Init(GPIOB, &DISP_RS);
 	}
-//#else	
 	else
 	{
 	DISP_RS.GPIO_Pin = GPIO_Pin_2;  
@@ -257,6 +262,7 @@ void watchdog_init(void)
 		IWDG_Enable();  			//enable the watchdog
 		IWDG_ReloadCounter(); // reload the value
 }
+
 void watchdog(void)
 {
 	IWDG_ReloadCounter(); // reload the value
@@ -282,7 +288,7 @@ void Warmboot(void)
 //	pid3_pterm = read_eeprom(EEP_PID3_PTERM);
 //	pid3_iterm = read_eeprom(EEP_PID3_ITERM);
 
-	pir_timer = (uint16)read_eeprom(EEP_PIR_TIMER + 1) + read_eeprom(EEP_PIR_TIMER);
+	pir_timer = (uint16)read_eeprom(EEP_PIR_TIMER + 1)*256 + read_eeprom(EEP_PIR_TIMER);
 //	pir_timer = pir_timer * 60;
 //	ID_Lock = read_eeprom(EEP_ID_WRITE_ENABLE);
 
@@ -303,8 +309,7 @@ void Warmboot(void)
 	item_to_adjust = MIN_MENU ;
 	
 //	#ifdef WIRELESS_PIR
-//	CTEST = 1;
-//	CTEST1 = 1;
+
 //	keypad_read_flag = 0;
 //	pir_end = 1;
 //	SPI_initial();
@@ -351,7 +356,13 @@ void Warmboot(void)
 //				DisRestart( );			
 			}
 
-																				    	
+	MAX_MASTER = read_eeprom(EEP_MAX_MASTER);
+	if(MAX_MASTER == 0xff || MAX_MASTER <= 1)
+	{
+		MAX_MASTER = 254;
+		write_eeprom(EEP_MAX_MASTER,MAX_MASTER);
+	}
+		
 	if((EEP_DaySpLo == 255) && (EEP_DaySpHi == 255))
 		{
 		EEP_DaySpLo = 200;
@@ -551,11 +562,16 @@ void Warmboot(void)
 		if(disp_item_queue(i) == 255)
 			disp_item_queue(i) = 0;		 
 	 	}
-
-	co2_calibration_data = Calibration_CO2_HI;//read_eeprom(EEP_CO2_CALIBRATION + 1);
-  co2_calibration_data = co2_calibration_data << 8;
-  co2_calibration_data += Calibration_CO2_LO;
-
+  co2_calibration_data = 0;
+	if((Calibration_CO2_HI == 0xff) && (Calibration_CO2_LO == 0xff))
+		co2_calibration_data = 0;
+	else
+	{		
+		co2_calibration_data |= Calibration_CO2_HI;//read_eeprom(EEP_CO2_CALIBRATION + 1);
+		co2_calibration_data = co2_calibration_data << 8;
+		co2_calibration_data |= Calibration_CO2_LO;
+	}
+  
 //    hardware_detect();
 
 //	if (pic_version < 3)
@@ -568,11 +584,11 @@ void Warmboot(void)
 //		prestatus[i] = 0;
 //		event_counter[i] = 0;
 //	}
-	if((read_eeprom(EEP_TABLE1_ZERO + 1) << 8) + read_eeprom(EEP_TABLE1_ZERO) < (read_eeprom(EEP_TABLE1_FIVE + 1) << 8) + read_eeprom(EEP_TABLE1_FIVE))
+	if(((int16)read_eeprom(EEP_TABLE1_ZERO + 1) << 8) + read_eeprom(EEP_TABLE1_ZERO) < ((int16)read_eeprom(EEP_TABLE1_FIVE + 1) << 8) + read_eeprom(EEP_TABLE1_FIVE))
   		slope_type[0] = 1;
 	else
 		slope_type[0] = 0;
-	if((read_eeprom(EEP_TABLE2_ZERO + 1) << 8) + read_eeprom(EEP_TABLE2_ZERO) < (read_eeprom(EEP_TABLE2_FIVE + 1) << 8) + read_eeprom(EEP_TABLE2_FIVE))
+	if(((int16)read_eeprom(EEP_TABLE2_ZERO + 1) << 8) + read_eeprom(EEP_TABLE2_ZERO) < ((int16)read_eeprom(EEP_TABLE2_FIVE + 1) << 8) + read_eeprom(EEP_TABLE2_FIVE))
   		slope_type[1] = 1;
 	else
 		slope_type[1] = 0;
@@ -581,7 +597,7 @@ void Warmboot(void)
 	if(lighting_stage > 1)
 		lighting_stage = 1;
 
-	if(read_eeprom(EEP_SETPOINT_UNLIMIT) == SPLIMIT)
+	if(SetpointUNLimit == SPLIMIT)
 	if(EEP_DefaultSetpoint < EEP_MinSetpoint || EEP_DefaultSetpoint > EEP_MaxSetpoint) 
 		{
 		EEP_DefaultSetpoint = 200;//((int16)(b.eeprom[EEP_DAY_SETPOINT - MAXEEPCONSTRANGE + 1] << 8)+EEP_DefaultSetpoint)/10;
@@ -669,7 +685,9 @@ if(read_eeprom(EEP_PIR_SENSOR_SELECT) == 255)
 // MaxTransducerRange = read_eeprom(EEP_TRANSDUCER_RANGE_MAX);
 // MinTransducerRange = read_eeprom(EEP_TRANSDUCER_RANGE_MIN);
 	#ifndef TSTAT8_HUNTER
- RTC_Get();
+  RTC_Get();
+
+	
  if(calendar.w_year == 0)	
 	SetRTCTime(EEP_CLOCK_YEAR, 2017);
 #endif 
@@ -687,12 +705,12 @@ static void debug_config(void)
 {
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO | RCC_APB2Periph_GPIOB | RCC_APB2Periph_GPIOA, ENABLE);
 	GPIO_PinRemapConfig(GPIO_Remap_SWJ_Disable, ENABLE);
-
 }
 
 int main(void)
 {
-	uint8 i=0;
+	uint8 rtc_state = 0;
+	uint8 i=0,j=0;
 	GPIO_InitTypeDef HUNTER_LED;
 	uint16_t pdu_len = 0; 
 	BACNET_ADDRESS  src;
@@ -700,11 +718,19 @@ int main(void)
 	NVIC_SetVectorTable(NVIC_VectTab_FLASH, 0x8008000);
 	debug_config();
 	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);
+	watchdog();
  	delay_init(72);
+	
+	//GPIO_init_LCD();
+		
+
+	
 	
 	TIM6_Int_Init(100, 719);
 
-	AT24CXX_Init();    
+	AT24CXX_Init();
+
+  watchdog_init();	
 //  if(RTC_Init())
 //	{ 
 //	update_flag = 3;
@@ -715,7 +741,7 @@ int main(void)
 #endif	
 	InitialRAM();
 	GPIO_init_LCD();
-	inputs_init();
+	//inputs_init();
 	output_ini();
 	relay_ctl_pwm(1,0);
 	relay_ctl_pwm(2,0);
@@ -724,18 +750,33 @@ int main(void)
 	relay_ctl_pwm(5,0);	
 	sequence_of_operation = Sys_Sequence;
 	Warmboot();	
-		
+	watchdog();	
 #ifdef TSTAT7_ARM
 	GPIO_ResetBits(GPIOA, GPIO_Pin_0);
- 	Tstat7_InitScreen();
- 	Tstat7_FullScreen();
+	if(HardwareVersion <= 21)//hardware version below 21 old LCD
+	{
+		Tstat7_InitScreen();
+		Tstat7_FullScreen();
+	}
+	else//rev22 and up, new lcd
+	{
+		Tstat7_InitScreen_HT1621();
+		Tstat7_InitScreen();
+//		Newlcdtest();
+		
+	}
+	
+	
 #else
 	#ifdef COLOR_TEST
 	TSTAT8_MENU_COLOR2 = 256*(uint32)b.eeprom[TEST1] + b.eeprom[TEST2];
 	TSTAT8_BACK_COLOR = 256*(uint32)b.eeprom[TEST3] + b.eeprom[TEST3+1];
 	TANGLE_COLOR = 256*(uint32)b.eeprom[TEST4] + b.eeprom[TEST5];
 	#endif
+	watchdog();
+  GPIO_SetBits(GPIOA, GPIO_Pin_0);
  	LCDtest();
+
 #endif
 	
 	mul_analog_in_buffer[8] = 0;
@@ -769,87 +810,29 @@ int main(void)
 		}
 	 
 	if(protocol_select == 1)//bacnet protocol	
-		modbus.com_config[0] = BAC_MSTP;//;
+		Modbus.com_config[0] = BAC_MSTP;//;
 	else
-		modbus.com_config[0] = MODBUS;	
+		Modbus.com_config[0] = MODBUS;	
 
 	if(EEP_DeadMaster == 0)
 			deadmaster_triggered = 0;
 	
-	if(modbus.com_config[0] == BAC_MSTP)
+	//if(modbus.com_config[0] == BAC_MSTP)
 		mass_flash_init();
 	
-	if(modbus.com_config[0] == BAC_MSTP)//if bacnet protocol, schedule only support occupied and unoccupied mode 
-	{
-//		schedule_on_off = SCHEDULE_ON;
-		for(i=0;i<7;i++)
-		{
-			ScheduleMondayFlag(0+i*3) = 0x11;
-			ScheduleMondayFlag(1+i*3) = 0x11;
-			ScheduleMondayFlag(2+i*3) = 0x11;
-		}
-	}
+//	if(modbus.com_config[0] == BAC_MSTP)//if bacnet protocol, schedule only support occupied and unoccupied mode 
+//	{
+////		schedule_on_off = SCHEDULE_ON;
+//		for(i=0;i<7;i++)
+//		{
+//			ScheduleMondayFlag(0+i*3) = 0x11;
+//			ScheduleMondayFlag(1+i*3) = 0x11;
+//			ScheduleMondayFlag(2+i*3) = 0x11;
+//		}
+//	}
 	
 	for(i=0;i<7;i++)
 		pid_ctrl_bit[i] = b.eeprom[EEP_PID_OUTPUT1+i];
-	
-
-	#ifdef TSTAT_ZIGBEE
-	if((RS485_Mode == 0)||(RS485_Mode == 2))//rs485 mode
-	{
-		#endif
-		switch(EEP_Baudrate)
-		{
-			case BAUDRATE_9600:
-				uart1_init(9600);
-			break;
-			
-			case BAUDRATE_19200:
-				uart1_init(19200);
-			break;
-
-			case BAUDRATE_38400:
-				uart1_init(38400);
-			break;
-
-			case BAUDRATE_57600:
-				uart1_init(57600);
-			break;
-
-			case BAUDRATE_115200:
-				uart1_init(115200);
-			break;		
-
-			case BAUDRATE_76800:
-				uart1_init(76800);
-			break;
-					
-			case BAUDRATE_1200:
-				uart1_init(1200);
-			break;
-
-			case BAUDRATE_4800:
-				uart1_init(4800);
-			break;
-
-			case BAUDRATE_14400:
-				uart1_init(14400);
-			break;
-		
-			default:
-				uart1_init(19200);
-			break;	
-		}
-	#ifdef TSTAT_ZIGBEE		
-	}
-	
-	if((RS485_Mode == 1)||(RS485_Mode == 2))
-		uart4_init(115200);
-	#endif//TSTAT_ZIGBEE
-	
-	#ifdef TSTAT_CO2
-	uart3_init(9600);
-	#endif
 	
 
 #ifdef TSTAT8_HUNTER
@@ -904,47 +887,64 @@ int main(void)
 #endif
 
 #ifndef TSTAT8_HUNTER 
-  while(RTC_Init())
+  watchdog();
+	
+	rtc_state = 1;
+//	#ifndef TSTAT7_ARM
+//	disp_str(FORM15X30, 0,  0,  "RTC Ini..",TSTAT8_CH_COLOR,TSTAT8_BACK_COLOR);
+//	#endif
+  while(rtc_state)
 	{ 
-	if(i<5)
-		i++;
-	else
-	{
-		#ifndef TSTAT7_ARM 
-		disp_str(FORM15X30, 0,  0,  "RTC Err",TSTAT8_CH_COLOR,TSTAT8_BACK_COLOR);	
-		#endif
-		break;
-	}
-	update_flag = 3;
-	delay_ms(1000);	
+		watchdog();
+		if(i<20)
+		{
+			if(RTC_Init() == 1) //initial OK
+			{
+				rtc_state = 0;
+				break;
+			}
+			else
+				i++;
+		}
+		else
+		{
+			#ifndef TSTAT7_ARM 
+//			for(j=0;j<3;j++)
+//			{
+//				disp_str(FORM15X30, 0,  0,  "RTC fail ",TSTAT8_CH_COLOR,TSTAT8_BACK_COLOR);	
+//				delay_ms(500);
+//				disp_str(FORM15X30, 0,  0,  "         ",TSTAT8_CH_COLOR,TSTAT8_BACK_COLOR);
+//				delay_ms(500);
+//			}				
+			#endif
+			rtc_state = 0;
+			break;
+		}
+	//update_flag = 3;
+	delay_ms(100);	
 	}	
 #endif	
-	
-//disp_str(FORM15X30, 0,  0,  "testing",TSTAT8_CH_COLOR,TSTAT8_BACK_COLOR);
-//while(1)
-//{
-//	GPIO_SetBits(GPIOA, GPIO_Pin_0);
-//	delay_ms(1000);
-//	GPIO_ResetBits(GPIOA, GPIO_Pin_0);
-//	delay_ms(1000);
-//}
-	watchdog_init();
-	xTaskCreate( vControlLogic, ( signed portCHAR * ) "ControlLogic", configMINIMAL_STACK_SIZE+500, NULL, tskIDLE_PRIORITY + 5, NULL );
+
+	//humidity sensor detect	
+
+	xTaskCreate( vControlLogic, ( signed portCHAR * ) "ControlLogic", configMINIMAL_STACK_SIZE+800, NULL, tskIDLE_PRIORITY + 6, NULL );
 	xTaskCreate( vInputTask, ( signed portCHAR * ) "Input", configMINIMAL_STACK_SIZE+300, NULL, tskIDLE_PRIORITY + 2, NULL );
- 	xTaskCreate( vCOMMTask, ( signed portCHAR * ) "COMM", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 3, NULL );
-//	xTaskCreate( vUpdatePID, ( signed portCHAR * ) "PID", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL );
+ 	xTaskCreate( vCOMMTask, ( signed portCHAR * ) "COMM", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 5, NULL );
 
 	xTaskCreate( vKeypadsHandle, ( signed portCHAR * ) "KeypadsHandle", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 3, NULL );	
 #ifndef TSTAT7_ARM
 	xTaskCreate( vDisplayRefresh, ( signed portCHAR * ) "DispalyRefresh", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 3, NULL );	
 #endif
-	xTaskCreate( vOutputTask, ( signed portCHAR * ) "OutputTask", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 2, NULL );		
 	xTaskCreate( vSoftwareTimer, ( signed portCHAR * ) "Softwaretimer", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL );					
-	xTaskCreate( vMSTP_TASK, (signed portCHAR * ) "MSTP", configMINIMAL_STACK_SIZE+1000, NULL, tskIDLE_PRIORITY + 3, NULL );
+	xTaskCreate( vMSTP_TASK, (signed portCHAR * ) "MSTP", configMINIMAL_STACK_SIZE+800, NULL, tskIDLE_PRIORITY + 5, NULL );
 #ifdef TSTAT7_ARM
 	xTaskCreate( vTstat7_Menu, ( signed portCHAR * ) "Tstat7_Menu", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 3, NULL );	
 #endif
+	xTaskCreate( vCoolHeatLockOut, ( signed portCHAR * ) "CoolingLockOut", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL );
+//	xTaskCreate( vHeatingLockOut, ( signed portCHAR * ) "HeatingLockOut", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL );
+	xTaskCreate( vWifitask, ( signed portCHAR * ) "Wifitask", configMINIMAL_STACK_SIZE + 500, NULL, tskIDLE_PRIORITY + 5, NULL );
 	vTaskStartScheduler();
+
 
 }
 
@@ -960,15 +960,12 @@ static int8 f[4];
 void vInputTask( void *pvParameters )
 {
 	static uint8 i = 0;
-	uint8 co2_cnt = 0;
-	uint16 temp;
-//	uint8 pwmcnt = 0;
-	#ifdef TSTAT_CO2
-	uint8 const *p_co2_cmd = poll_co2_cmd;
-	#endif
-
-
+	uint8 j = 0;
+	static uint8 occ_trigged = 0;
 	
+	uint16 temp;
+
+	inputs_init();
     mul_analog_cal[0] = ((int16)Calibration_AI1_HI<<8) + Calibration_AI1_LO;
 		mul_analog_cal[1] = ((int16)Calibration_AI2_HI<<8) + Calibration_AI2_LO;	
 		mul_analog_cal[2] = ((int16)Calibration_AI3_HI<<8) + Calibration_AI3_LO;	
@@ -979,44 +976,82 @@ void vInputTask( void *pvParameters )
 		mul_analog_cal[7] = ((int16)Calibration_AI8_HI<<8) + Calibration_AI8_LO;
 
     GPIO_ResetBits(GPIOE, GPIO_Pin_2);	
-//		if (mul_analog_cal[i] > 1000 || mul_analog_cal[i] < 0)
-//			{
-//			mul_analog_cal[i] = 500;
-//			write_eeprom(EEP_CALIBRATION_ANALOG1 + i*2 , CALIBRATION_DEFAULT & 0xFF);
-//			write_eeprom(EEP_CALIBRATION_ANALOG1 + i*2 + 1, CALIBRATION_DEFAULT >> 8);
-//			}
-//		}																						    
-	GPIO_SetBits(GPIOB, GPIO_Pin_9);
+																					    
+	  GPIO_SetBits(GPIOB, GPIO_Pin_9);
+	
+		SHT3X_Init(0x45); 
+		
+		for(i=0;i<10;i++)
+		{
+			if(SHT3X_GetTempAndHumi(&tem_org, &hum_org, REPEATAB_HIGH, MODE_POLLING, 50) == 0)
+			hum_sensor_type = 1;
+		}
+		if(hum_sensor_type != 1)
+			hum_sensor_type = 0;		
+		
+	
 	for(;;)
 		{	
 		power_up_timer++;
 		CalTemperature();
-			
-//		if((EEP_PidOutput7 == 1)&&(ctest[0] == 0))
-//			ctest[0] = 1;	
-//		if(giPwmTimeOn[0] == 0)
-//			ctest[2] = 1;	
 		
 		CalInput();
-		
-		for(i=0;i<8;i++)
-		{			
-			if(AI_Function(i) == 2)//occupancy sensor
+	
+		watchdog();
+		occ_trigged = 0;	
+		for(j=0;j<8;j++)
+		{		
+			
+			if(AI_Function(j) == AI_FUNCTION_OCCSENSOR || AI_Function(j) == AI_FUNCTION_CLOCK )//occupancy sensor
 			{
-			 if(mul_analog_input[i] == UNOCCUPIED)
-			 {
-				 fan_speed_user = FAN_OFF;
-				 setpoint_select = NIGHT_SP;
-				 fanspeedbuf = FAN_OFF;
-				 EEP_FanSpeed = FAN_OFF;
-			 }
+				if(mul_analog_input[j] == 1)
+				 {
+					 if(occ_flag == 0)
+					 {
+					 fan_speed_user = FAN_AUTO;
+					 setpoint_select = DHOME_SP;
+					 fanspeedbuf = fan_speed_user;//FAN_AUTO;
+					 EEP_FanSpeed = fan_speed_user;//FAN_AUTO;
+					 if(AI_Function(j) == AI_FUNCTION_OCCSENSOR)
+							override_timer_time = (uint32)60 * EEP_OverrideTimer;
+					 
+					 occ_trigged = 1;
+					 }
+				 
+				 }
 			 else
 			 {
-				 fan_speed_user = FAN_AUTO;
-				 setpoint_select = DHOME_SP;
-				 fanspeedbuf = FAN_AUTO;
-				 EEP_FanSpeed = FAN_AUTO;
+				 if(occ_trigged == 0)
+				 {
+					 if(schedule_on_off == OFF )//if schdule is off, then control by override timer
+					 {
+						 if(override_timer_time == 0)
+						 {
+						 fan_speed_user = FAN_OFF;
+						 setpoint_select = NIGHT_SP;
+						 fanspeedbuf = FAN_OFF;
+						 EEP_FanSpeed = FAN_OFF;
+						 occ_flag = 0;
+						 }
+					 }
+					 else //schedule is on
+					 {
+						if(AI_Function(j) == AI_FUNCTION_CLOCK)
+						{
+						 fan_speed_user = FAN_OFF;
+						 setpoint_select = NIGHT_SP;
+						 fanspeedbuf = FAN_OFF;
+						 EEP_FanSpeed = FAN_OFF;
+						 occ_flag = 0;					
+						}
+					 }
+				}
 			 }
+
+			 #ifndef TSTAT7_ARM
+			 icon.occ_unocc = 1;
+			 icon.fan = 1;
+			 #endif
 			}			
 		}	
 			
@@ -1102,44 +1137,6 @@ void vInputTask( void *pvParameters )
 
 	#endif		
 
-		
-				
-		//reg 107:ff 03 00 6b 00 01 e0 08
-		//reg 108:ff 03 00 6c 00 01 31 c9
-		//reg 109:ff 03 00 6d 00 01 00 09				
-		//read_co2_sensor();
-		#ifdef TSTAT_CO2		
-		if(co2_cnt == 5)
-		{
-		co2_cnt = 0;			
-		memcpy(uart_sendC,p_co2_cmd,9);
-    USART_SendDataStringC(9);	
-		}
-		co2_cnt++;
-		#endif
-				
-//		if((EEP_PidOutput7 == 1)&&(ctest[0] == 1))
-//				ctest[0] = 2;//EEP_PidOutput7 changed before run this task
-
-//		if((EEP_PidOutput7 == 1)&&(ctest[0] == 0))
-//				ctest[0] = 3;//EEP_PidOutput7 changed during run this task
-		
-//		if((giPwmTimeOn[0] == 0) && (ctest[2] == 1))
-//			ctest[2] = 2;
-//		if((giPwmTimeOn[0] == 1) && (ctest[2] == 0))
-//			ctest[2] = 3;	
-		
-//		pwmcnt++;
-//		ctest[2] = pwmcnt;
-//		if(pwmcnt < 20)	
-//			pwmtest = 470;			
-//			
-//		if(pwmcnt>20)
-//			pwmtest = 495;	
-//		
-//		if(pwmcnt >= 40)
-//			pwmcnt = 0;
-		
 		delay_ms(300);
 		}			
 }
@@ -1147,13 +1144,93 @@ void vInputTask( void *pvParameters )
 
 uint8 utest = 0;
 uint8 utest2 = 0;
+extern uint16 co2_data_org;
+
+
 void vCOMMTask(void *pvParameters )
 {
 	static uint16 i = 0;
+	#ifdef TSTAT_CO2
+	uint16 co2_cnt = 0;
+	uint8 const *p_co2_cmd;
+	p_co2_cmd = poll_co2_cmd;
+	
+	#endif
+	
 	modbus_init();
 	#ifdef TSTAT_ZIGBEE
   modbus_initB();
 	#endif 
+	
+	#ifdef TSTAT_CO2
+	GPIO_ResetBits(GPIOB, GPIO_Pin_9);
+	#endif
+	
+	
+	
+#ifdef TSTAT_ZIGBEE
+	if((RS485_Mode == 0)||(RS485_Mode == 2))//rs485 mode
+	{
+#endif
+		switch(EEP_Baudrate)
+		{
+			case BAUDRATE_9600:
+				uart1_init(9600);
+			break;
+			
+			case BAUDRATE_19200:
+				uart1_init(19200);
+			break;
+
+			case BAUDRATE_38400:
+				uart1_init(38400);
+			break;
+
+			case BAUDRATE_57600:
+				uart1_init(57600);
+			break;
+
+			case BAUDRATE_115200:
+				uart1_init(115200);
+			break;		
+
+			case BAUDRATE_76800:
+				uart1_init(76800);
+			break;
+					
+			case BAUDRATE_1200:
+				uart1_init(1200);
+			break;
+
+			case BAUDRATE_4800:
+				uart1_init(4800);
+			break;
+
+			case BAUDRATE_14400:
+				uart1_init(14400);
+			break;
+		
+			default:
+				uart1_init(19200);
+			break;	
+		}
+#ifdef TSTAT_ZIGBEE		
+	}
+	
+	if((RS485_Mode == 1)||(RS485_Mode == 2))
+		uart4_init(115200);
+#endif//TSTAT_ZIGBEE
+	
+	#ifdef TSTAT_CO2
+	uart3_init(9600);
+	#endif
+	
+	
+	
+	
+	co2_data_org = 400;
+	co2_data = 400;
+	
 	for( ;; )
 	{
 		if (dealwithTag)
@@ -1195,14 +1272,62 @@ void vCOMMTask(void *pvParameters )
 		{
 		
 		}
-    if(i<250)
+    if(i<50)
 			i++;
 		else
 		{
 			i = 0;
 			RTC_Get();
+			Local_Date.year = calendar.w_year;
+			Local_Date.month = calendar.w_month;
+			Local_Date.day = calendar.w_date;
+			Local_Date.wday = calendar.week;
+			
+			Local_Time.hour = calendar.hour;
+			Local_Time.min = calendar.min;
+			Local_Time.sec = calendar.sec;
 		}
-		delay_ms(2) ;
+		
+		//reg 107:ff 03 00 6b 00 01 e0 08
+		//reg 108:ff 03 00 6c 00 01 31 c9
+		//reg 109:ff 03 00 6d 00 01 00 09				
+		//read_co2_sensor();
+		#ifndef TSTAT7_ARM
+		#ifdef TSTAT_CO2	
+
+
+		
+		if(co2_cnt == 200)
+		{
+			co2_cnt = 0;	
+
+			if(update_flag == 20) //disable auto calibration
+			{
+				p_co2_cmd = disable_co2_autocal_MHZ19B;
+			
+			}
+			else if(update_flag == 21)//enable auto calibration
+			{
+				p_co2_cmd = enable_co2_autocal_MHZ19B;
+			}
+			
+			else
+				p_co2_cmd = poll_co2_cmd;
+			
+			memcpy(uart_sendC,p_co2_cmd,9);
+			USART_SendDataStringC(9);
+
+			if(CO2_AutoCal != co2_autocal_disable)
+			{
+				CO2_AutoCal = co2_autocal_disable;
+				write_eeprom(EEP_CO2_AUTOCAL_SW , co2_autocal_disable);	
+			}				
+		}
+		co2_cnt++;
+		#endif		
+		#endif
+			
+		delay_ms(10) ;
 	}
 	
 }
@@ -1244,13 +1369,20 @@ void vUpdatePID( void *pvParameters )
 void vControlLogic( void *pvParameters )
 {
 	int16 temp;
+	uint8 ctrl_cnt = 0;
 	uint16 pid_cnt = 0;
 	init_delay_flag = 0;
 	
+	
+	OUTPUT_1TO5.BYTE = 0x00;
+	RELAY_1TO5.BYTE = 0xff;
+	OFF_FIRST.BYTE = 0xff;
+	
+	delay_ms(3000);
 	//PID_init();
+	
 	for(;;)
 		{
-
 			temp = Get_current_setpoint(setpoint_select);
 			#ifdef TSTAT7_ARM
 			if(setpoint_change_flag == 0)
@@ -1277,20 +1409,30 @@ void vControlLogic( void *pvParameters )
 			{
 				update_pid(0);
 			}
-//			ctest[1] = temperature;
-//			ctest[2] = loop_setpoint[PID_LOOP1];			
-//			ctest[0] = PID_realize(loop_setpoint[PID_LOOP1],temperature);
-			
-		  control_logic();		
-		if(EEP_TimerSelect == 3)
-			{
-			TimerSwitch(2);
-			}
-		else
-  		TimerSwitch(1);
-		
 
-		delay_ms(200);
+			ctrl_cnt++;
+			if(ctrl_cnt > 5)
+			{			
+				if(EEP_TimerSelect == 3)
+					{
+					TimerSwitch(2);
+					}
+				else
+					TimerSwitch(1);
+				ctrl_cnt = 0;
+				control_logic();
+					
+			}
+		  	
+
+     	refresh_output();			
+
+		
+    #ifdef TSTAT7
+		delay_ms(50); //previous 200
+		#else
+		delay_ms(200); //previous 200
+		#endif
 		}			
 }
 
@@ -1314,54 +1456,77 @@ void vStateSwitch( void *pvParameters )
 	}		
 }
 
-void vCoolingLockOut( void *pvParameters )
+void vCoolHeatLockOut( void *pvParameters )
 {
 	static uint8 i;
+	
 	for(;;)
-		{			
-			cooling_lock_10s_counter++;
+		{	
+			for(i=0;i<3;i++)
+			{			
+				if(((COOLING_LOCKOUT>>i)&0x01) == 1)				
+					cooling_lock_10s_counter[i]++;
 				
-				if (cooling_lock_10s_counter >= 6)
+				if (cooling_lock_10s_counter[i] >= 6)
 				{
-					cooling_lock_10s_counter = 0;
-					for(i=0;i<3;i++)
-					{	
-						if(cooling_lockout_time[i]>0)
-							cooling_lockout_time[i]--;
-						if (cooling_lockout_time[i] == 0)
-						{
-							set_bit(&COOLING_LOCKOUT,i,0) ; //cooling_lockout = 0 ;
-							vTaskDelete(NULL);
-						}
-					}
-				}				
+					cooling_lock_10s_counter[i] = 0;
+
+					if(cooling_lockout_time[i]>0)
+						cooling_lockout_time[i]--;
+					if((cooling_lockout_time[i] == 0)&&(((COOLING_LOCKOUT>>i)&0x01) == 1))
+					{
+						set_bit(&COOLING_LOCKOUT,i,0) ; //cooling_lockout = 0;
+						//vTaskDelete(NULL);
+					}			 
+				}	
+			}
+			
+			for(i=0;i<3;i++)
+			{			
+				if(((HEATING_LOCKOUT>>i)&0x01) == 1)				
+					heating_lock_10s_counter[i]++;
+				
+				if (heating_lock_10s_counter[i] >= 6)
+				{
+					heating_lock_10s_counter[i] = 0;
+
+					if(heating_lockout_time[i]>0)
+						heating_lockout_time[i]--;
+					if((heating_lockout_time[i] == 0)&&(((HEATING_LOCKOUT>>i)&0x01) == 1))
+					{
+						set_bit(&HEATING_LOCKOUT,i,0) ; //cooling_lockout = 0;
+						//vTaskDelete(NULL);
+					}			 
+				}	
+			}						
 		delay_ms(10000);
 		}			
 }
 
-void vHeatingLockOut( void *pvParameters )
-{
-	static uint8 i;
-	for(;;)
-		{			
-			heating_lock_10s_counter++;
-			if (heating_lock_10s_counter >= 6)
-			{
-				heating_lock_10s_counter = 0;
-				for(i=0;i<3;i++)
-				{
-					if(heating_lockout_time[i] > 0)
-						heating_lockout_time[i]--;
-					if(heating_lockout_time[i] == 0)
-					{
-						set_bit(&HEATING_LOCKOUT,i,0) ; //heating_lockout = 0 ;
-						vTaskDelete(NULL);
-					}
-				}
-			}			
-			delay_ms(10000);
-		}			
-}
+//void vHeatingLockOut( void *pvParameters )
+//{
+//	static uint8 i;
+//	for(;;)
+//		{	
+//			if(((HEATING_LOCKOUT>>i)&0x01) == 1)		
+//				heating_lock_10s_counter++;
+//			if (heating_lock_10s_counter >= 6)
+//			{
+//				heating_lock_10s_counter = 0;
+//				for(i=0;i<3;i++)
+//				{
+//					if(heating_lockout_time[i] > 0)
+//						heating_lockout_time[i]--;
+//					if((heating_lockout_time[i] == 0) &&(((HEATING_LOCKOUT>>i)&0x01) == 1))
+//					{
+//						set_bit(&HEATING_LOCKOUT,i,0) ; //heating_lockout = 0 ;
+//						//vTaskDelete(NULL);
+//					}
+//				}
+//			}			
+//			delay_ms(10000);
+//		}			
+//}
 
 void vKeypadsHandle(void *pvParameters)
 {
@@ -1385,20 +1550,21 @@ void vKeypadsHandle(void *pvParameters)
 //	}		
 //}
 
+/*
 static void vOutputTask( void *pvParameters)
 {
-	OUTPUT_1TO5.BYTE = 0x00;
-	RELAY_1TO5.BYTE = 0xff;
-	OFF_FIRST.BYTE = 0xff;
+//	OUTPUT_1TO5.BYTE = 0x00;
+//	RELAY_1TO5.BYTE = 0xff;
+//	OFF_FIRST.BYTE = 0xff;
 	//output_ini();
 	for(;;)
 		{
-		frc_mode_check();
-		refresh_output();			
-		delay_ms(200);
+		//frc_mode_check();
+		//refresh_output();			
+		delay_ms(50);
 		}			
 }
-
+*/
 
 
 #ifndef TSTAT7_ARM
@@ -1406,6 +1572,8 @@ static void vDisplayRefresh(void *pvParameters)
 {
 	uint8 menu_buf[9],i;
 	static uint8 top_refresh = 0;
+	static uint8 rs485_warning = 0;
+	uint8 bk_blink = 0;
 	 
   icon.unit = 1;
 	icon.setpoint = 1;
@@ -1418,12 +1586,12 @@ static void vDisplayRefresh(void *pvParameters)
 	GPIO_SetBits(GPIOA, GPIO_Pin_0);
   scroll = &scroll_ram[0][0];
 	fanspeedbuf = fan_speed_user;
-	if(testlcd)//test interface
-	{
-		;//disp_str(FORM15X30, 0,  0,  "testing",TSTAT8_CH_COLOR,TSTAT8_BACK_COLOR);
-	}	
-	else
-	{
+//	if(voltage_overshoot == 1)//rs485 lines have high voltage 
+//	{
+//		;//disp_str(FORM15X30, 0,  0,  "testing",TSTAT8_CH_COLOR,TSTAT8_BACK_COLOR);
+//	}	
+//	else
+//	{
 		
 		disp_null_icon(240, 36, 0, 0,TIME_POS,TSTAT8_CH_COLOR, TSTAT8_MENU_COLOR2);
     disp_icon(14, 14, degree_o, UNIT_POS - 14,56 ,TSTAT8_CH_COLOR, TSTAT8_BACK_COLOR);
@@ -1431,17 +1599,45 @@ static void vDisplayRefresh(void *pvParameters)
     draw_tangle(102,105);
 		draw_tangle(102,148);
 		draw_tangle(102,191);
-	
-	}
-	for(;;)
-		{	
-//		if((EEP_PidOutput7 == 1 )&&(ctest[0] == 0))
-//			ctest[0] = 1;	
-
 		
+		disp_str(FORM15X30, SCH_XPOS,  SETPOINT_POS,  "SET",SCH_COLOR,TSTAT8_BACK_COLOR);//TSTAT8_BACK_COLOR
+		disp_str(FORM15X30, SCH_XPOS,FAN_MODE_POS,"FAN",SCH_COLOR,TSTAT8_BACK_COLOR);
+		disp_str(FORM15X30, SCH_XPOS,  SYS_MODE_POS,  "SYS",SCH_COLOR,TSTAT8_BACK_COLOR);
+	
+//	}
+	for(;;)
+		{		
 			top_refresh++;
 			if(top_refresh > 5)
 				top_refresh = 0;
+			//voltage_overshoot = 1;
+//			if(voltage_overshoot == 1)//rs485 lines have high voltage 
+//			{
+
+//				clear_lines();//disp_str(FORM15X30, 0,  0,  "testing",TSTAT8_CH_COLOR,TSTAT8_BACK_COLOR);
+//				//103,TSTAT8_CH_COLOR
+//				disp_str(FORM15X30, 0,  103,  "Warning",0xf800,TSTAT8_BACK_COLOR);
+//				if(rs485_p_voltage > 12)
+//					disp_str(FORM15X30, 0,  103+BTN_OFFSET,  "RS485+",0xf800,TSTAT8_BACK_COLOR);
+//				if(rs485_n_voltage > 12)
+//					disp_str(FORM15X30, 0,  103+BTN_OFFSET+BTN_OFFSET,  "RS485-",0xf800,TSTAT8_BACK_COLOR);
+//				rs485_warning = 1;
+//			}
+//			else if(rs485_warning == 1 && voltage_overshoot == 0)//overshoot voltage has gone, refresh normal display
+//			{
+//				rs485_warning = 0;
+//				clear_lines();
+//				icon.setpoint = 1;
+//				icon.fan = 1;
+//				icon.sysmode = 1;
+//        icon.heatcool = 1;
+//				icon.occ_unocc = 1;
+
+//				draw_tangle(102,105);
+//				draw_tangle(102,148);
+//				draw_tangle(102,191);
+//			}				
+			
 			if(update_flag == 1)
 			{
 				ClearScreen(TSTAT8_BACK_COLOR); 
@@ -1459,55 +1655,54 @@ static void vDisplayRefresh(void *pvParameters)
 			}
 			else if(update_flag == 4)//switch baudrate
 			{
-			//	GPIO_ResetBits(GPIOA, GPIO_Pin_0);
 				update_flag = 0;
 			if(EEP_Baudrate == BAUDRATE_19200)
 				{
 				uart1_init(19200);
-				modbus.baudrate = 19200;
+				Modbus.baudrate = 19200;
 				}
 			else if(EEP_Baudrate == BAUDRATE_9600)
 				{
 				uart1_init(9600);
-				modbus.baudrate = 9600;
+				Modbus.baudrate = 9600;
 				}
 
 			else if(EEP_Baudrate == BAUDRATE_38400)
 				{
 				uart1_init(38400);
-				modbus.baudrate = 38400;
+				Modbus.baudrate = 38400;
 				}
 			else if(EEP_Baudrate == BAUDRATE_57600)
 				{
 				uart1_init(57600);
-				modbus.baudrate = 57600;
+				Modbus.baudrate = 57600;
 				}
 			else if(EEP_Baudrate == BAUDRATE_115200)
 				{
 				uart1_init(115200);
-				modbus.baudrate = 115200;
+				Modbus.baudrate = 115200;
 				}
 			else if(EEP_Baudrate == BAUDRATE_76800)
 				{
 				uart1_init(76800);
-				modbus.baudrate = 76800;
+				Modbus.baudrate = 76800;
 				}	
 			else if(EEP_Baudrate == BAUDRATE_1200)
 				{
 				uart1_init(1200);
-				modbus.baudrate = 1200;
+				Modbus.baudrate = 1200;
 				}
 			else if(EEP_Baudrate == BAUDRATE_4800)
 				{
 				uart1_init(4800);
-				modbus.baudrate = 4800;
+				Modbus.baudrate = 4800;
 				}
 			else if(EEP_Baudrate == BAUDRATE_14400)
 				{
 				uart1_init(14400);
-				modbus.baudrate = 14400;
+				Modbus.baudrate = 14400;
 				}
-			if(modbus.com_config[0] == MODBUS)	
+			if(Modbus.com_config[0] == MODBUS)	
 				serial_restart();				
 			}
 			
@@ -1594,10 +1789,20 @@ static void vDisplayRefresh(void *pvParameters)
 				#endif
 				serial_restart();
 			}
-			
-			
 
+			else if(update_flag == 11)
+			{
+				mass_flash_init();
+				update_flag = 0;
+			}
 			
+			else if(update_flag == 15)
+			{
+				disp_str(FORM15X30, SCH_XPOS,  SETPOINT_POS,  "SET",SCH_COLOR,TSTAT8_BACK_COLOR);
+				disp_str(FORM15X30, SCH_XPOS,	 FAN_MODE_POS,  "FAN",SCH_COLOR,TSTAT8_BACK_COLOR);
+				disp_str(FORM15X30, SCH_XPOS,  SYS_MODE_POS,  "SYS",SCH_COLOR,TSTAT8_BACK_COLOR);
+				update_flag = 0;
+			}
 			
 			
 			else
@@ -1630,13 +1835,18 @@ static void vDisplayRefresh(void *pvParameters)
 								draw_tangle(102,105);
 								draw_tangle(102,148);
 								draw_tangle(102,191);
+								
+								disp_str(FORM15X30, SCH_XPOS,  SETPOINT_POS,  "SET",SCH_COLOR,TSTAT8_BACK_COLOR);//TSTAT8_BACK_COLOR
+								disp_str(FORM15X30, SCH_XPOS,FAN_MODE_POS,"FAN",SCH_COLOR,TSTAT8_BACK_COLOR);
+								disp_str(FORM15X30, SCH_XPOS,  SYS_MODE_POS,  "SYS",SCH_COLOR,TSTAT8_BACK_COLOR);
 								exist_menu = 0;
 							}
 							blink_flag = !blink_flag;
 							display_flag = 1;
 							if(top_refresh == 5)
 								//Top_area_display(TOP_AREA_DISP_ITEM_TEMPERATURE, -250, TOP_AREA_DISP_UNIT_C);
-								Top_area_display(TOP_AREA_DISP_ITEM_TEMPERATURE, temperature, TOP_AREA_DISP_UNIT_C);	
+								Top_area_display(TOP_AREA_DISP_ITEM_TEMPERATURE, temperature, TOP_AREA_DISP_UNIT_C);
+													
 							if(Show_ID_Enable)
 							{
 								if(showidbit == 0)
@@ -1650,11 +1860,49 @@ static void vDisplayRefresh(void *pvParameters)
 							}	
 							else							
 							{
-								display_SP(loop_setpoint[0]);
-								display_fanspeed(fanspeedbuf);
-								display_mode();	
-							}	
-								
+								if(HardwareVersion > HW_VERSION)
+									{
+										if(voltage_overshoot == 1)//rs485 lines have high voltage 
+										{
+											clear_lines();//disp_str(FORM15X30, 0,  0,  "testing",TSTAT8_CH_COLOR,TSTAT8_BACK_COLOR);
+											//103,TSTAT8_CH_COLOR
+											disp_str(FORM15X30, 0,  103,  "High",0xf800,TSTAT8_BACK_COLOR);
+											disp_str(FORM15X30, 0,  103+BTN_OFFSET,  "Voltage",0xf800,TSTAT8_BACK_COLOR);							
+											disp_str(FORM15X30, 0,  103+BTN_OFFSET+BTN_OFFSET,  "on RS485",0xf800,TSTAT8_BACK_COLOR);
+
+											rs485_warning = 1;
+										}
+										else if(rs485_warning == 1 && voltage_overshoot == 0)//overshoot voltage has gone, refresh normal display
+										{
+											rs485_warning = 0;
+											clear_lines();
+											icon.setpoint = 1;
+											icon.fan = 1;
+											icon.sysmode = 1;
+											icon.heatcool = 1;
+											icon.occ_unocc = 1;
+
+											draw_tangle(102,105);
+											draw_tangle(102,148);
+											draw_tangle(102,191);
+											disp_null_icon(239, 45, 0, 0,TIME_POS,TSTAT8_CH_COLOR, TSTAT8_MENU_COLOR2);
+										}	
+										else
+										{
+										display_SP(loop_setpoint[0]);
+										display_fanspeed(fanspeedbuf);
+										display_mode();	
+										}										
+									}
+									
+									else
+									{
+										display_SP(loop_setpoint[0]);
+										display_fanspeed(fanspeedbuf);
+										display_mode();	
+									}
+								}	
+									
 									
 								for(i=0;i<9;i++)
 									icon_control_output(i);
@@ -1662,8 +1910,25 @@ static void vDisplayRefresh(void *pvParameters)
 								display_icon();
 								//refresh_icon_output();
 								display_fan();
-							
-							display_scroll();
+							if(HardwareVersion > HW_VERSION)
+							{
+								if(voltage_overshoot == 1)
+									scroll_warning(0);
+								else
+								{
+									if(bacnet_detect)
+										scroll_warning(1);
+									else
+										display_scroll();	
+								}
+							}
+							else
+							{
+								if(bacnet_detect)
+									scroll_warning(1);
+								else								
+									display_scroll();
+							}
 							if(icon.cmnct_send > 0)
 								disp_icon(13, 26, cmnct_send, 	0,	0, TSTAT8_CH_COLOR, TSTAT8_BACK_COLOR);
 							else
@@ -1680,6 +1945,11 @@ static void vDisplayRefresh(void *pvParameters)
 							if(icon.cmnct_rcv > 0)
 								icon.cmnct_rcv--;
 							#endif	
+							
+							if(SSID_Info.IP_Wifi_Status == WIFI_NORMAL)
+								disp_icon(26, 26, wificonnect, 210,	0, TSTAT8_CH_COLOR, TSTAT8_BACK_COLOR);
+							else
+								disp_icon(26, 26, wifinocnnct, 210,	0, TSTAT8_CH_COLOR, TSTAT8_BACK_COLOR);
 
 							
 							#ifdef TSTAT8_HUNTER
@@ -1693,12 +1963,6 @@ static void vDisplayRefresh(void *pvParameters)
 					}					
 					DealWithKey(menu_id);										
 			}
-			
-//				if((EEP_PidOutput7 == 1)&&(ctest[0] == 1))
-//				ctest[0] = 4;//EEP_PidOutput7 changed before run this task
-
-//				if((EEP_PidOutput7 == 1)&&(ctest[0] == 0))
-//				ctest[0] = 5;//EEP_PidOutput7 changed during run this task
 			
 			delay_ms(300);
 		}
@@ -1714,13 +1978,38 @@ uint16 zigbee_reset_timer =0;
 #endif
 static void vSoftwareTimer( void *pvParameters)//one second base software timer
 {	
-	//uint8 zgb_str =0;
-//	uint8 i;
+
 	uint8 onemin_cnt = 0;
   uint8 onehour_cnt = 0;
+	uint16 i;
+	
+  schedule_change = 1;
+	if(EEP_DeadMaster != 0)								
+		deadmaster_timer = EEP_DeadMaster * 60;	
+	
 	for(;;)
 		{	
-			watchdog();
+		watchdog();
+			
+		if(bacnet_detect_timer > 0)	
+			bacnet_detect_timer--;
+		if(bacnet_detect_timer == 0)
+			bacnet_detect = 0;
+		
+		if(update_flag == 13)
+		{
+			flash_buf[0] = SerialNumber(0);
+			flash_buf[1] = SerialNumber(1);		
+			STMFLASH_Write(FLASH_SERIAL_NUM_LO, flash_buf, 2);
+		}	
+
+		if(update_flag == 14)
+		{
+			flash_buf[0] = SerialNumber(2);
+			flash_buf[1] = SerialNumber(3);		
+			STMFLASH_Write(FLASH_SERIAL_NUM_HI, flash_buf, 2);
+		}	
+		
 					
 		if(idlockflag == NEED_TO_UNLOCK)  
 			idlockcnt++;
@@ -1806,6 +2095,25 @@ static void vSoftwareTimer( void *pvParameters)//one second base software timer
 				Show_ID_Enable = 0;
 				exist_menu = 1;
 			}
+			
+			if(update_flag == 16)
+			{
+				update_flag = 0;
+				initialize_eeprom( ) ; // set default parameters
+			}
+			if(update_flag == 17)
+			{
+
+				update_flag = 0;
+				for(i = 20;i<1900;i++)
+				{
+					if((i!= EEP_SERINALNUMBER_WRITE_FLAG)&&(i != EEP_BAUDRATE))
+				   write_eeprom(i,0xff);
+				}
+				initialize_eeprom( ) ;
+				SoftReset();
+			}
+			
 		#ifdef TSTAT7_ARM	
 			if(update_flag == 1)
 			{
@@ -1922,6 +2230,42 @@ static void vSoftwareTimer( void *pvParameters)//one second base software timer
 					
 				}
 			}
+			
+			if(zigbee_present == 1)
+			{
+					uart_sendB[0] = 0x00;
+					uart_sendB[1] = 0x03;
+					uart_sendB[2] = 0x00;
+					uart_sendB[3] = 0x15;
+					uart_sendB[4] = 0x00;
+					uart_sendB[5] = 0x01;
+					uart_sendB[6] = 0x94;
+					uart_sendB[7] = 0x1f;
+				
+					zigbee_send_flag = 1;
+					zigbee_rev_cnt = 0;
+					USART_SendDataStringB(8);			
+			}
+			
+			if(update_flag == 18)
+			{
+					uart_sendB[0] = 0x00;
+					uart_sendB[1] = 0x06;
+					uart_sendB[2] = 0x00;
+					uart_sendB[3] = 0x15;
+					uart_sendB[4] = (zigbee_id_temp >> 8) & 0xff;
+					uart_sendB[5] = zigbee_id_temp & 0xff;
+					uart_sendB[6] = 0x94;
+					uart_sendB[7] = 0x1f;
+				
+					zigbee_send_flag = 2;
+					zigbee_rev_cnt = 0;
+					USART_SendDataStringB(8);				
+			}
+			
+			
+			
+			
 //				zgb_str++;
 //				if(zgb_str>=10)
 //				{
@@ -2068,6 +2412,19 @@ static void vSoftwareTimer( void *pvParameters)//one second base software timer
 			hc_blink_timer--;		
 			icon.sysmode = 1;
 		}
+		if(item_menu_timer > 0)
+			item_menu_timer--;
+		if((item_menu_timer == 0)&&(item_menu == 1))
+		{
+			item_menu = 0;
+      update_flag = 15;
+			icon.setpoint = 1;
+			icon.fan = 1;
+			icon.heatcool = 1;
+			current_item = 0;
+		}
+		
+		
 #endif//TSTAT7_ARM		
 		outsidetem_timer--;
 		if(outsidetem_timer == 0)//outside tem sensor detect
@@ -2136,24 +2493,41 @@ static void vMSTP_TASK(void *pvParameters )
 	AVS = MAX_AVS;
   AIS = MAX_AIS;
   AOS = MAX_AOS;
-  BIS = 0;
+//  BIS = 0;
   BOS = MAX_BOS;
-	
+//	Check_All_WR();
 	//ar_dates[0][22] = 0x55;
 	
 	for (;;)
-    {			
-		if(modbus.com_config[0] == BAC_MSTP)
+    {
+ 
+    if(update_flag == 12) //station_number has been changed 
 		{
-				modbus.protocal = BAC_MSTP;
-				pdu_len = datalink_receive(&src, &PDUBuffer[0], sizeof(PDUBuffer), 0,	modbus.protocal);
+			Inital_Bacnet_Server();
+			update_flag = 0;
+		}
+		
+		if(update_flag == 19)
+		{
+			Inital_Bacnet_Server();
+			//modbus.com_config[0] = BAC_MSTP;
+			dlmstp_init(NULL);
+			//if(modbus.com_config[0] == BAC_MSTP)
+			Recievebuf_Initialize(0);
+		  update_flag = 0;
+		}
+			
+		if(Modbus.com_config[0] == BAC_MSTP)
+		{
+				Modbus.protocal = BAC_MSTP;
+				pdu_len = datalink_receive(&src, &PDUBuffer[0], sizeof(PDUBuffer), 0,	Modbus.protocal);
 						
 				if(pdu_len) 
 					{
 						npdu_handler(&src, &PDUBuffer[0], pdu_len, BAC_MSTP);		
 					} 						
 		}
-			delay_ms(1);
+			delay_ms(5);
 	}
 	
 }

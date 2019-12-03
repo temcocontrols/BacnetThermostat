@@ -23,15 +23,34 @@ void SDA_OUT(void)
 	GPIO_SetBits(gpio_map[EEP_SDA].GPIOX, gpio_map[EEP_SDA].GPIO_Pin_X);
 }
 
+void SCL_OUT(void)
+{
+	GPIO_InitTypeDef GPIO_InitStructure; 
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_Init(GPIOA, &GPIO_InitStructure);
+
+}
+
+void SCL_IN(void)
+{
+	GPIO_InitTypeDef GPIO_InitStructure; 
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU; 
+	GPIO_Init(GPIOA, &GPIO_InitStructure);
+	//GPIO_SetBits(GPIOA, GPIO_Pin_3);
+}
+
 //IO操作函数	 
-static void IIC_SCL(u8 status)
+void IIC_SCL(u8 status)
 {
 	if(status) 
 		GPIO_SetBits(gpio_map[EEP_SCL].GPIOX, gpio_map[EEP_SCL].GPIO_Pin_X);
 	else
 		GPIO_ResetBits(gpio_map[EEP_SCL].GPIOX, gpio_map[EEP_SCL].GPIO_Pin_X); 
-}
-static void IIC_SDA(u8 status)
+} 
+void IIC_SDA(u8 status)
 {
 	if(status) 
 		GPIO_SetBits(gpio_map[EEP_SDA].GPIOX, gpio_map[EEP_SDA].GPIO_Pin_X);
@@ -44,6 +63,14 @@ u8 READ_SDA(void)
 	status = GPIO_ReadInputDataBit(gpio_map[EEP_SDA].GPIOX, gpio_map[EEP_SDA].GPIO_Pin_X);  		  
 	return status;
 }
+
+u8 READ_SCL(void)
+{
+	u8 status;
+	status = GPIO_ReadInputDataBit(gpio_map[EEP_SCL].GPIOX, gpio_map[EEP_SCL].GPIO_Pin_X);  		  
+	return status;
+}
+
 
 //初始化IIC
 void IIC_Init(void)

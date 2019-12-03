@@ -101,6 +101,49 @@ void Tstat7_lcd_gpio_Init(void);
 void HT1621_Test(short int pos);
 void Digital_Test(short int pos,unsigned char data);
 void DisplayIcon(uint16 CMD,uint8 status); 
+
+/*******************NEW LCD ST7565R  ROUTINE *******************/
+void Tstat7_lcd_gpio_Init_REV22(void);
+void Tstat7_InitScreen_HT1621( void );
+void LCDInit();
+void Newlcdtest(void); 
+void LCD_WRITE_CMD(uint8 dat);
+void LCD_WRITE_DAT(uint8 dat);
+void WRITE_STRING86(uint8 plat,uint8 column,uint8 *p);
+/*******************END OF ST7565R  ROUTINE *******************/
+
+
+
+ #define CS_0             GPIO_ResetBits(GPIOD, GPIO_Pin_6)  //LCD????
+ #define RES_1            GPIO_SetBits(GPIOD, GPIO_Pin_9)    //LCD?????,?????????
+ #define RES_0            GPIO_ResetBits(GPIOD, GPIO_Pin_9)  //LCD??
+ #define A0_1             GPIO_SetBits(GPIOD, GPIO_Pin_10)   //Ao=1,?LCD????
+ #define A0_0             GPIO_ResetBits(GPIOD, GPIO_Pin_10) //Ao=0,?LCD????
+ #define WR_1             GPIO_SetBits(GPIOD, GPIO_Pin_11)   //LCD???
+ #define WR_0             GPIO_ResetBits(GPIOD, GPIO_Pin_11) //LCD???
+ #define RD_1             GPIO_SetBits(GPIOD, GPIO_Pin_12)   //LCD???
+ #define RD_0             GPIO_ResetBits(GPIOD, GPIO_Pin_12) //LCD???
+ 
+
+ void Lcd12232delay(unsigned int Time);//????
+ void LCD_WriteLByte(uint8 B);//?PC???8?,?8???
+ void w_com(unsigned char B);//?LCD???
+ void w_data(unsigned char data);//?LCD???
+ void SetStartPage(u8 StartPageAddress);//????????
+ void SetStartColumn(u8 StartColumnAddress);//???????
+ void SetStartLine(u8 StartLineAddress);//???????
+ void clrscr(void);//??
+ void ClrOnePage(unsigned StartPage);//????
+ void ClrNumColumn(unsigned char StartPage,unsigned char StartColumn,unsigned Num);//??StartPage??StartColumn????????Num?
+ void Displayhz(unsigned char num,const unsigned char *p);//?(0,0)????num?16*16???(??????)
+ void DisplayHz(unsigned char StartPage,unsigned char column,unsigned char Num,const unsigned char *p);//?StartPage???Column?????????Num???
+ void DisplayZf(unsigned char StartPage,unsigned char column,unsigned char Num,const unsigned char *p);//?StartPage???Column?????????Num?8*16???
+ void DisplayZF(unsigned char num,const unsigned char *p);//?(0,0)????num?8*16???(??????)
+ void display_map(const unsigned char *p);//??128*32???,p????????
+ void LCD_Init();//LCD???
+
+
+
 #endif//TSTAT7_ARM
 
 

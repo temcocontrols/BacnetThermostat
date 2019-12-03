@@ -18,6 +18,14 @@ extern LINK b;
 //#define zigbee_index										b.eeprom[51]
 //#define zigbee_point_info(x)						b.eeprom[52 + x]
 
+#define IPmode																b.eeprom[EEP_IP_MODE]
+#define IPnum(x)															b.eeprom[EEP_IP1 + x]
+#define IP_submask(x)													b.eeprom[EEP_IP_SUB_MASK_1 + x]
+#define Gateway_addr(x)												b.eeprom[EEP_GATEWAY_ADDR_1 + x]
+#define ListenPort_lo													b.eeprom[EEP_LISTEN_PORT]
+#define ListenPort_hi													b.eeprom[EEP_LISTEN_PORT + 1]
+
+
 
 #define ScheduleMondayEvent1(x)					b.eeprom[EEP_SCHEDULE_MONDAY_EVENT1_H + x]
 #define ScheduleMondayEvent2(x)					b.eeprom[EEP_SCHEDULE_MONDAY_EVENT2_H + x]
@@ -48,6 +56,35 @@ extern LINK b;
 #define ScheduleSatdayFlag(x)					b.eeprom[EEP_SCHEDULE_SATDAY_FLAG + x]
 #define ScheduleSundayFlag(x)					b.eeprom[EEP_SCHEDULE_SUNDAY_FLAG + x]
 #define InputVoltageTerm							b.eeprom[EEP_INPUT_VOLTAGE_TERM]
+
+#define Schedule2MondayEvent1(x)					b.eeprom[EEP_SCHEDULE_MONDAY_EVENT1_H_2 + x]
+#define Schedule2MondayEvent2(x)					b.eeprom[EEP_SCHEDULE_MONDAY_EVENT2_H_2 + x]
+#define Schedule2MondayEvent3(x)					b.eeprom[EEP_SCHEDULE_MONDAY_EVENT3_H_2 + x]
+#define Schedule2MondayEvent4(x)					b.eeprom[EEP_SCHEDULE_MONDAY_EVENT4_H_2 + x]
+#define Schedule2MondayEvent5(x)					b.eeprom[EEP_SCHEDULE_MONDAY_EVENT5_H_2 + x]
+#define Schedule2MondayEvent6(x)					b.eeprom[EEP_SCHEDULE_MONDAY_EVENT6_H_2 + x]
+
+#define Schedule2TuesdayEvent1(x)				b.eeprom[EEP_SCHEDULE_TUESDAY_EVENT1_H_2 + x]
+#define Schedule2WensdayEvent1(x)				b.eeprom[EEP_SCHEDULE_WENSDAY_EVENT1_H_2 + x]
+#define Schedule2ThursdayEvent1(x)				b.eeprom[EEP_SCHEDULE_THURSDAY_EVENT1_H_2 + x]
+#define Schedule2FridayEvent1(x)					b.eeprom[EEP_SCHEDULE_FRIDAY_EVENT1_H_2 + x]
+#define Schedule2SatdayEvent1(x)					b.eeprom[EEP_SCHEDULE_SATDAY_EVENT1_H_2 + x]
+#define Schedule2SundayEvent1(x)					b.eeprom[EEP_SCHEDULE_SUNDAY_EVENT1_H_2 + x]
+#define Schedule2HolidayEvent1(x)				b.eeprom[EEP_SCHEDULE_HOLIDAY_EVENT1_H_2 + x]
+#define Schedule2HolidayEvent2(x)				b.eeprom[EEP_SCHEDULE_HOLIDAY_EVENT2_H_2 + x]
+#define Schedule2HolidayEvent3(x)				b.eeprom[EEP_SCHEDULE_HOLIDAY_EVENT3_H_2 + x]
+#define Schedule2HolidayEvent4(x)				b.eeprom[EEP_SCHEDULE_HOLIDAY_EVENT4_H_2 + x]
+#define Schedule2HolidayEvent5(x)				b.eeprom[EEP_SCHEDULE_HOLIDAY_EVENT5_H_2 + x]
+#define Schedule2HolidayEvent6(x)				b.eeprom[EEP_SCHEDULE_HOLIDAY_EVENT6_H_2 + x]
+
+#define Schedule2Day(x)									b.eeprom[EEP_SCHEDULE_DAY_BEGAIN_2 + x]
+#define Schedule2MondayFlag(x)	       		b.eeprom[EEP_SCHEDULE_MONDAY_FLAG_2 + x]
+#define Schedule2TuesdayFlag(x)				b.eeprom[EEP_SCHEDULE_TUESDAY_FLAG_2 + x]
+#define Schedule2WensdayFlag(x)				b.eeprom[EEP_SCHEDULE_WENSDAY_FLAG_2 + x]
+#define Schedule2ThursdayFlag(x)				b.eeprom[EEP_SCHEDULE_THURSDAY_FLAG_2 + x]
+#define Schedule2FridayFlag(x)					b.eeprom[EEP_SCHEDULE_FRIDAY_FLAG_2 + x]
+#define Schedule2SatdayFlag(x)					b.eeprom[EEP_SCHEDULE_SATDAY_FLAG_2 + x]
+#define Schedule2SundayFlag(x)					b.eeprom[EEP_SCHEDULE_SUNDAY_FLAG_2 + x]
 
 #define EEP_DaySpLo											b.eeprom[EEP_DAY_SETPOINT]
 #define EEP_DaySpHi											b.eeprom[EEP_DAY_SETPOINT + 1]
@@ -81,6 +118,7 @@ extern LINK b;
 #define UnitS2_HI_HI										b.eeprom[EEP_UNITS2_HIGH + 1]
 #define UnitS2_LO_LO										b.eeprom[EEP_UNITS2_LOW]
 #define UnitS2_LO_HI										b.eeprom[EEP_UNITS2_LOW + 1]
+#define CustomerTable1(x)                b.eeprom[EEP_TABLE1_ZERO + x]
 #define Table1_ZERO_LO									b.eeprom[EEP_TABLE1_ZERO]
 #define Table1_ZERO_HI									b.eeprom[EEP_TABLE1_ZERO + 1]
 #define Table1_HalfOne_LO								b.eeprom[EEP_TABLE1_HALFONE]
@@ -103,6 +141,7 @@ extern LINK b;
 #define Table1_HalfFive_HI							b.eeprom[EEP_TABLE1_HALFFIVE + 1]
 #define Table1_Five_LO									b.eeprom[EEP_TABLE1_FIVE]
 #define Table1_Five_HI									b.eeprom[EEP_TABLE1_FIVE + 1]
+#define CustomerTable2(x)               b.eeprom[EEP_TABLE2_ZERO + x]
 #define Table2_ZERO_LO									b.eeprom[EEP_TABLE2_ZERO]
 #define Table2_ZERO_HI									b.eeprom[EEP_TABLE2_ZERO + 1]
 #define Table2_HalfOne_LO								b.eeprom[EEP_TABLE2_HALFONE]
@@ -128,6 +167,8 @@ extern LINK b;
 #define Calibration_AI_LO(x)						b.eeprom[EEP_CALIBRATION_ANALOG1 + x]
 #define Calibration_AI_HI(x)						b.eeprom[EEP_CALIBRATION_ANALOG1 + 1 + x]
 
+#define CO2_AutoCal											b.eeprom[EEP_CO2_AUTOCAL_SW]
+
 #define Calibration_AI1_LO							b.eeprom[EEP_CALIBRATION_ANALOG1]
 #define Calibration_AI1_HI							b.eeprom[EEP_CALIBRATION_ANALOG1 + 1]
 #define Calibration_AI2_LO							b.eeprom[EEP_CALIBRATION_ANALOG2]
@@ -152,6 +193,7 @@ extern LINK b;
 #define Calibration_Internal_HI					b.eeprom[EEP_CALIBRATION_INTERNAL_THERMISTOR + 1]
 #define Calibration_LO									b.eeprom[EEP_CALIBRATION]
 #define Calibration_HI									b.eeprom[EEP_CALIBRATION + 1]
+#define Hum_Tcalibration                b.eeprom[EEP_CALIBRATION]
 #endif
 /*************************************************************************************/
 #define EEP_TempSelect			b.eeprom[EEP_TEMP_SELECT]
@@ -964,6 +1006,9 @@ extern LINK b;
 //	EEP_WIRELESS_PIR_RESPONSE4,
 //	EEP_WIRELESS_PIR_RESPONSE5,
 //	EEP_PRESSURE_VALUE,	
+
+#define Delta_tem_source1							b.eeprom[EEP_DELTA_TEM1] 
+#define Delta_tem_source2							b.eeprom[EEP_DELTA_TEM2]
 
 #define PressureManualValue_LO							b.eeprom[EEP_PRESSURE_MANUAL_VALUE]
 #define PressureManualValue_HI							b.eeprom[EEP_PRESSURE_MANUAL_VALUE + 1]

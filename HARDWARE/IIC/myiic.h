@@ -26,6 +26,12 @@
 
 
 //IIC所有操作函数
+void SDA_OUT(void);
+void SDA_IN(void);
+void SCL_OUT(void);
+void SCL_IN(void);
+
+
 void IIC_Init(void);				//初始化IIC的IO口				 
 void IIC_Start(void);				//发送IIC开始信号
 void IIC_Stop(void);				//发送IIC停止信号
@@ -37,6 +43,9 @@ void IIC_NAck(void);				//IIC不发送ACK信号
 
 void IIC_Write_One_Byte(u8 daddr,u8 addr,u8 data);
 u8 IIC_Read_One_Byte(u8 daddr,u8 addr);
-void SDA_IN(void);
+//void SDA_IN(void);
 u8 READ_SDA(void);
+u8 READ_SCL(void);
+void IIC_SDA(u8 status);
+void IIC_SCL(u8 status);
 #endif

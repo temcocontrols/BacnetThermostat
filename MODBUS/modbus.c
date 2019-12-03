@@ -33,8 +33,26 @@
 #include "ProductModel.h"
 #include "store.h"
 #include "stmflash.h"
+#include "bsp_esp8266.h"
 
 
+uint16 read_wifi_data_by_block(uint16 addr);
+void write_wifi_data_by_block(uint16 StartAdd,uint8 HeadLen,uint8 *pData,uint8 type);
+extern U8_T MAX_MASTER;
+
+uint32 const hex[2][2][2] __attribute__((at(0x8009000)));
+#define GET_FIRST_BYTE(ADDR)  *ADDR & 0XFF   
+
+//extern uint16 item_color;
+uint16 zigbee_id = 0;
+uint8 zigbee_present = 0;
+uint8 zigbee_send_flag = 0;
+extern uint16 co2_data_org;
+uint8 bacnet_detect = 0;
+uint8 bacnet_detect_timer = 0;
+uint8 reg_num;
+uint8 bacnet_to_modbus[300];
+uint8 dealdata_flag = 0;
 uint8 zigbee_alive = 0;
 uint8 ScheduleModeNum = 0;
 extern u32 Instance;
@@ -49,7 +67,7 @@ uint8 zigbee_point_info[48];
 extern int16 gsiPara;
 uint8 showidbit = 0;
 uint8 showid_cnt = 0;
-int16 ctest[10];
+//uint16 ctest[50];
 extern uint8 pid_flag;
 extern et_mode_of_operation   intended_mode_of_operation[3]; 
 extern uint16 pir_value;
@@ -72,7 +90,7 @@ extern uint16 crnt_crnt;
 uint8 startbit = 0;
 extern uint8 uartbuf2[9];
 uint8 send_count2 = 0;
-uint16 co2_dataB = 0;
+//uint16 co2_dataB = 0;
 //PID function variables
 extern int16  loop_setpoint[3]; 
 int32 xdata iterm_sum_1sec[3];
@@ -115,6 +133,9 @@ u8 USART_RX_BUFE[10];
 u8 uart_send[USART_SEND_LEN];
 u8 uart_sendB[USART_SEND_LEN];
 u8 uart_sendC[9] = {0xFF, 0x01, 0x86, 0x00,0x00,0x00,0x00,0x00,0X79}/* MHZ19B */ ;//{0xff, 0x03, 0x00, 0x6b, 0x00, 0x01, 0xe0, 0x08} temco co2 module;
+
+
+
 //vu8 transmit_finished = 0 ; 
 vu8 rece_count = 0;
 vu8 rece_countB = 0;
@@ -126,7 +147,7 @@ vu8 serial_receive_timeout_countB = 0;
 u8 SERIAL_RECEIVE_TIMEOUT ;
 u8 dealwithTag ;
 u8 dealwithTagB = 0 ;
-STR_MODBUS modbus ;
+extern STR_MODBUS Modbus ;
 //u8 DealwithTag ;
 u16 sendbyte_num = 0 ;
 u16 sendbyte_numB = 0 ;
@@ -161,22 +182,24 @@ void USART1_IRQHandler(void)
 	uint8 i;
 	static u16 send_count1 = 0 ;
 	if(USART_GetITStatus(USART1, USART_IT_RXNE) == SET)	//
-	{
-
-			 
-			if(modbus.com_config[0] == MODBUS )	
+	{		
+			#ifndef TSTAT7_ARM							
+			icon.cmnct_rcv = 1;	
+			#endif
+			if(Modbus.com_config[0] == MODBUS )	
 			{
-						if(rece_count < 50)
+						if(rece_count < 80)
 							USART_RX_BUFA[rece_count++] = USART_ReceiveData(USART1);//(USART1->DR);		//?áè??óê?μ?μ?êy?Y
 						else
 							serial_restart();
 						
+
 						if(rece_count == 1)
 						{
 							// This starts a timer that will reset communication.  If you do not
 							// receive the full packet, it insures that the next receive will be fresh.
 							// The timeout is roughly 7.5ms.  (3 ticks of the hearbeat)
-							rece_size = 50;
+							rece_size = 80;
 							serial_receive_timeout_count = SERIAL_RECEIVE_TIMEOUT;
 							
 //							if((USART_RX_BUFA[0] != 255) && (USART_RX_BUFA[0] != laddress) && (USART_RX_BUFA[0] != 0))
@@ -211,7 +234,12 @@ void USART1_IRQHandler(void)
 							}
 							
 							
-//							else if(USART_RX_BUFA[0] == 0x55 && USART_RX_BUFA[1] == 0xff && USART_RX_BUFA[2] == 0x01 && USART_RX_BUFA[5] == 0x00 && USART_RX_BUFA[6] == 0x00)
+							else if(USART_RX_BUFA[0] == 0x55 && USART_RX_BUFA[1] == 0xff && USART_RX_BUFA[2] == 0x01 && USART_RX_BUFA[5] == 0x00 && USART_RX_BUFA[6] == 0x00)
+  						{
+							//bacnet protocal detected
+						    bacnet_detect = 1;
+								bacnet_detect_timer = 5;
+	  					}	
 //							{//bacnet protocal detected
 //								rs485_zigbee = RS485_ENABLE;
 //								USART_DeInit(UART4); 	
@@ -244,31 +272,46 @@ void USART1_IRQHandler(void)
 							// full packet received - turn off serial timeout
 //							if(dealwith_package == 0)//if dealwith_package !=0, previous package is not done	
 //							{	
-
-								if(checkCrc())
+                if((USART_RX_BUFA[0] == 0xff) || (USART_RX_BUFA[0] == laddress))
 								{
-								#ifndef TSTAT7_ARM							
-								icon.cmnct_rcv = 1;	
-								#endif
-								if(EEP_DeadMaster != 0)								
-									deadmaster_timer = EEP_DeadMaster * 60;							
-								serial_receive_timeout_count = 0;
-								for(i=0;i<rece_size;i++)
+									if(checkCrc())
 									{
-									USART_RX_BUFB[i] = USART_RX_BUFA[i];
-//									dealwith_package = 1;										
+										if(dealdata_flag == 1)
+										{
+											serial_restart();
+											return;
+										}
+										else
+										{
+										
+											if(EEP_DeadMaster != 0)
+											{												
+												deadmaster_timer = EEP_DeadMaster * 60;
+												deadmaster_triggered = 0;												
+											}												
+											serial_receive_timeout_count = 0;
+											for(i=0;i<rece_size;i++)
+												{
+												USART_RX_BUFB[i] = USART_RX_BUFA[i];
+			//									dealwith_package = 1;										
+												}
+												dealwithTag = SERIALDEALTIME_DELAY;		// making this number big to increase delay
+												dec_blink = 1;
+										}
 									}
-									dealwithTag = SERIALDEALTIME_DELAY;		// making this number big to increase delay
-									dec_blink = 1;
+									else
+									{
+									serial_restart();
+									}
 								}
-							else
-							{
-							serial_restart();
-							}
+								else
+								{
+								serial_restart();
+								}
 						}
 		
 			}
-			else if(modbus.com_config[0] == BAC_MSTP )
+			else if(Modbus.com_config[0] == BAC_MSTP )
 			{
 				receive_buf = USART_ReceiveData(USART1); 
 				FIFO_Put(&Receive_Buffer0, receive_buf);
@@ -283,7 +326,7 @@ void USART1_IRQHandler(void)
 				#ifndef TSTAT7_ARM							
 				icon.cmnct_send = 1;	
 				#endif	
-			if((modbus.com_config[0] == MODBUS )||(modbus.com_config[0] == BAC_MSTP))
+			if((Modbus.com_config[0] == MODBUS )||(Modbus.com_config[0] == BAC_MSTP))
 				{
 				if( send_count1 >= sendbyte_num)
 					{
@@ -309,17 +352,54 @@ void USART1_IRQHandler(void)
 extern uint16 zigbee_reset_timer;
 extern uint8 utest;
 extern uint8 utest2;
+uint8 USART_RX_BUFE[10];
+uint8 zigbee_rev_cnt = 0;
+uint16 zigbee_id_temp = 0;
+
 void UART4_IRQHandler(void)                	//
 	{		
 //  
 //	u8 receive_buf ;
 	uint8 i;
 	static u16 send_countB = 0 ;
+		
 	if(USART_GetITStatus(UART4, USART_IT_RXNE) == SET)	//
 	{
 		zigbee_reset_timer = 0;
 		zigbee_alive = 1;
 		utest2++;
+		
+		if(zigbee_send_flag == 1)
+		{
+		 if(zigbee_rev_cnt < 7)
+			 USART_RX_BUFE[zigbee_rev_cnt++] = USART_ReceiveData(UART4);
+		 if(zigbee_rev_cnt == 7)
+		 {
+			if((USART_RX_BUFE[0] == 0x00) && (USART_RX_BUFE[1] == 0x03))
+			{
+				zigbee_id = (uint16)USART_RX_BUFE[3] * 256 + USART_RX_BUFE[4];
+				zigbee_present = 2;
+				zigbee_send_flag = 0;
+			}
+								
+		 }
+		}
+		else if(zigbee_send_flag == 2)
+		{
+			 if(zigbee_rev_cnt < 7)
+				 USART_RX_BUFE[zigbee_rev_cnt++] = USART_ReceiveData(UART4);
+			 if(zigbee_rev_cnt == 7)
+			 {
+				if((USART_RX_BUFE[0] == 0x00) && (USART_RX_BUFE[1] == 0x06))
+				{
+					zigbee_id = (uint16)USART_RX_BUFE[4] * 256 + USART_RX_BUFE[5]; 
+					update_flag = 0;
+					zigbee_send_flag = 0;
+				}
+									
+			 }		
+		}
+		
 			if(1/*modbus.com_config[0] == MODBUS */)	
 			{
 		
@@ -387,6 +467,9 @@ void UART4_IRQHandler(void)                	//
 						
 							if(checkCrcB())//&&((USART_RX_BUFC[0] == 255) || (USART_RX_BUFC[0] == laddress) || (USART_RX_BUFC[0] == 0)))
 							{	
+								if(zigbee_present == 0)
+									zigbee_present = 1;//indicate if zigbee module is present
+								
 								#ifndef TSTAT7_ARM							
 								icon.cmnct_rcv = 1;	
 								#endif
@@ -441,22 +524,27 @@ void UART4_IRQHandler(void)                	//
 
 
 #else
+// WIFI
 void UART4_IRQHandler(void)                	//串口4中断服务程序
 {	
-//  static uint16 i;
-//	uint8 bkstate;
-//	i++;
-//	if(i%2 == 1)
-//	{
-//	bkstate = ~bkstate;
-//	if(bkstate)
-//		GPIO_SetBits(GPIOA, GPIO_Pin_0);
-//	else
-//		GPIO_ResetBits(GPIOA, GPIO_Pin_0);	
-//	}
+	uint8_t ucCh;
+	if ( USART_GetITStatus ( macESP8266_USARTx, USART_IT_RXNE ) != RESET )
+	{
+		ucCh  = USART_ReceiveData( macESP8266_USARTx );
+		
+		if ( strEsp8266_Fram_Record .InfBit .FramLength < ( RX_BUF_MAX_LEN - 1 ) )                       //预留1个字节写结束符
+			strEsp8266_Fram_Record .Data_RX_BUF [ strEsp8266_Fram_Record .InfBit .FramLength ++ ]  = ucCh;
+
+	}
+	 	 
+	if ( USART_GetITStatus( macESP8266_USARTx, USART_IT_IDLE ) == SET )                                         //数据帧接收完毕
+	{
+    strEsp8266_Fram_Record .InfBit .FramFinishFlag = 1;
+		
+		ucCh = USART_ReceiveData( macESP8266_USARTx );                                                              //由软件序列清除中断标志位(先读USART_SR，然后读USART_DR)
 	
-//	GPIO_ResetBits(GPIOA, GPIO_Pin_0);	
-	return;
+//		ucTcpClosedFlag = strstr ( strEsp8266_Fram_Record .Data_RX_BUF, "CLOSED\r\n" ) ? 1 : 0	
+  }			
 }
 #endif //TSTAT_ZIGBEE	
 //--------------------------------------------------------------------
@@ -476,10 +564,10 @@ void USART3_IRQHandler(void)                	//
 			rcv_flag = 1;
 			USART_RX_BUFE[rece_countC++] = 0xff;
 	 }
-	 else if((rcv_flag == 1) && (temp == 0x86))
+	 else if((rcv_flag == 1) && ((temp == 0x86)||(temp == 0x79)))
 	 {
 			rcv_flag = 2;
-			USART_RX_BUFE[rece_countC++] = 0x86;
+			USART_RX_BUFE[rece_countC++] = temp;
 	 }
 	 else if(rcv_flag == 2)
 	 {
@@ -512,15 +600,31 @@ void USART3_IRQHandler(void)                	//
 		 for(i=0;i<8;i++)
 		 {
 			checksum += USART_RX_BUFE[i];
-//			ctest[i] = USART_RX_BUFE[i];
 		 }
 		 
 	  checksum = 0xff - checksum;
 		checksum += 1;
 //	   if(checksum == USART_RX_BUFE[8])
-			co2_data = USART_RX_BUFE[2] * 256 + USART_RX_BUFE[3];
-		 rece_countC = 0;
-		  rcv_flag=0;
+		if(USART_RX_BUFE[1] == 0x86) 
+			co2_data_org = USART_RX_BUFE[2] * 256 + USART_RX_BUFE[3];
+		else if(USART_RX_BUFE[1] == 0x79)
+		{
+			if(update_flag == 21)//auto cal enable
+			{					
+				co2_autocal_disable = 0;
+				update_flag = 0;
+			}
+			if(update_flag == 20)//auto cal disable
+			{					
+				co2_autocal_disable = 1;
+				update_flag = 0;
+			}
+			//write_eeprom(EEP_CO2_AUTOCAL_SW , co2_autocal_disable);			
+		
+		}
+		co2_present = 1;
+		rece_countC = 0;
+		rcv_flag=0;
 	 }
 	
 	}
@@ -631,9 +735,7 @@ void modbus_init(void)
 
 
 
-
-
-static void internalDeal(uint8  *bufadd)
+static void internalDeal1(uint8  *bufadd,uint8 type)
 {
 	uint16 address;
 	uint16 temp;
@@ -645,25 +747,33 @@ static void internalDeal(uint8  *bufadd)
 	
 	//uart_p = bufadd;
 	
+	dealdata_flag = 1;
+	if(type == 0 || type == BAC_TO_MODBUS)  // modbus packet
+	{
+	}
+	else    // TCP packet or wifi
+	{
+		bufadd = bufadd + 6;
+	}
+	
 	address = ((uint16)*(bufadd+2) <<8) + *(bufadd+3); //get modbus register number
 	
-if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
-		{
+	if(*(bufadd + 1) == MULTIPLE_WRITE_VARIABLES)
+	{
 		
 	 		temp_i = (uint16)(*(bufadd+2) << 8) + *(bufadd+3);
 			if(*(bufadd+6) > 24)
 					*(bufadd+6) = 24;
 			if(temp_i >= LINE1_CHAR1 && temp_i <= LINE2_CHAR4)
-				{				
+			{				
 				for(i=0;i<*(bufadd+6);i++)			//(data_buffer[6)*2)
 					{
 					write_eeprom(EEP_LINE1_CHAR1 + i,*(bufadd+7+i));
 					User_Info(i) = *(bufadd+7+i);	
 					}						
-				}
-
+			}
 			else if(temp_i  >= INTERNAL_CHAR1 && temp_i <= OUTPUT7_CHAR4)
-				{
+			{
 				for(i=0;i<*(bufadd+6);i++)
 					{
 					write_eeprom((EEP_INTERNAL_CHAR1 + i + (temp_i - INTERNAL_CHAR1)*2),*(bufadd+7+i));
@@ -742,7 +852,8 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 					{
 					write_eeprom((EEP_SCHEDULE_MONDAY_EVENT1_H + i),*(bufadd+8+i*2));
 					ScheduleMondayEvent1(i) = *(bufadd+8+i*2);
-					}						
+					}	
+				schedule_change = 1;					
 				}	
 
 			 else if(temp_i >= SCHEDULE_TUESDAY_EVENT1_H && temp_i <= SCHEDULE_TUESDAY_EVENT6_M)
@@ -751,7 +862,8 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 					{
 					write_eeprom((EEP_SCHEDULE_TUESDAY_EVENT1_H + i),*(bufadd+8+i*2));
 					ScheduleTuesdayEvent1(i) = *(bufadd+8+i*2);
-					}				
+					}		
+				schedule_change = 1;					
 				}	
 			 else if(temp_i >= SCHEDULE_WENSDAY_EVENT1_H && temp_i <= SCHEDULE_WENSDAY_EVENT6_M)
 		   	{
@@ -759,7 +871,8 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 					{
 					write_eeprom((EEP_SCHEDULE_WENSDAY_EVENT1_H + i),*(bufadd+8+i*2));
 					ScheduleWensdayEvent1(i) = *(bufadd+8+i*2);
-					}				
+					}
+				schedule_change = 1;	
 				}					
 				
 			 else if(temp_i >= SCHEDULE_THURSDAY_EVENT1_H && temp_i <= SCHEDULE_THURSDAY_EVENT6_M)
@@ -768,7 +881,8 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 					{
 					write_eeprom((EEP_SCHEDULE_THURSDAY_EVENT1_H + i),*(bufadd+8+i*2));
 					ScheduleThursdayEvent1(i) = *(bufadd+8+i*2);
-					}				
+					}	
+				schedule_change = 1;	
 				}	
 			 else if(temp_i >= SCHEDULE_FRIDAY_EVENT1_H && temp_i <= SCHEDULE_FRIDAY_EVENT6_M)
 		   	{
@@ -776,7 +890,8 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 					{
 					write_eeprom((EEP_SCHEDULE_FRIDAY_EVENT1_H + i),*(bufadd+8+i*2));
 					ScheduleFridayEvent1(i) = *(bufadd+8+i*2);
-					}				
+					}	
+				schedule_change = 1;	
 				}	
 			 else if(temp_i >= SCHEDULE_SATDAY_EVENT1_H && temp_i <= SCHEDULE_SATDAY_EVENT6_M)
 		   	{
@@ -784,7 +899,8 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 					{
 					write_eeprom((EEP_SCHEDULE_SATDAY_EVENT1_H + i),*(bufadd+8+i*2));
 					ScheduleSatdayEvent1(i) = *(bufadd+8+i*2);
-					}				
+					}	
+				schedule_change = 1;	
 				}	
 			 else if(temp_i >= SCHEDULE_SUNDAY_EVENT1_H && temp_i <= SCHEDULE_SUNDAY_EVENT6_M)
 		   	{
@@ -792,16 +908,22 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 					{
 					write_eeprom((EEP_SCHEDULE_SUNDAY_EVENT1_H + i),*(bufadd+8+i*2));
 					ScheduleSundayEvent1(i) = *(bufadd+8+i*2);
-					}				
+					}
+				schedule_change = 1;	
 				}
-			 else if(temp_i >= SCHEDULE_HOLIDAY_EVENT1_H && temp_i <= SCHEDULE_HOLIDAY_EVENT6_M)
+				else if(temp_i >= SCHEDULE_HOLIDAY_EVENT1_H && temp_i <= SCHEDULE_HOLIDAY_EVENT6_M)
 		   	{
-				for(i=0;i<*(bufadd+6)/2;i++)			//(data_buffer[6)*2)
+					for(i=0;i<*(bufadd+6)/2;i++)			//(data_buffer[6)*2)
 					{
-					write_eeprom((EEP_SCHEDULE_HOLIDAY_EVENT1_H + i),*(bufadd+8+i*2));
-					ScheduleHolidayEvent1(i) = *(bufadd+8+i*2);
-					}				
-				}				
+						write_eeprom((EEP_SCHEDULE_HOLIDAY_EVENT1_H + i),*(bufadd+8+i*2));
+						ScheduleHolidayEvent1(i) = *(bufadd+8+i*2);
+					}
+					schedule_change = 1;	
+				}	
+				else if(temp_i >= MODBUS_WIFI_START && temp_i <= MODBUS_WIFI_END)
+				{
+					write_wifi_data_by_block(temp_i,0,bufadd,0);
+				}					
 		}	
 	
 	
@@ -810,28 +932,30 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 	if(*(bufadd+1) == WRITE_VARIABLES)
 		{
 		if(address == SERIALNUMBER_LOWORD)
-			{
-			if((SN_WR_Flag & 0x01) == 0x01)//first two bytes of SN have been written
-				return;
-			else
+		{
+			if((SN_WR_Flag & 0x01) != 0x01)//first two bytes of SN have been written
+//				return;
+//			else
 				{
 				SerialNumber(0) = *(bufadd+5);
 				SerialNumber(1) = *(bufadd+4);
 				SN_WR_Flag |= 0x01;	
 				write_eeprom(EEP_SERIALNUMBER_LOWORD, *(bufadd+5));
 				write_eeprom(EEP_SERIALNUMBER_LOWORD + 1, *(bufadd+4));
-					
-				flash_buf[0] = *(bufadd+5);
-  			flash_buf[1] = *(bufadd+4);		
-				STMFLASH_Write(FLASH_SERIAL_NUM_LO, flash_buf, 2);
 				write_eeprom(EEP_SERINALNUMBER_WRITE_FLAG, SN_WR_Flag);
+				
+				update_flag = 13;					
+//				flash_buf[0] = *(bufadd+5);
+//  			flash_buf[1] = *(bufadd+4);		
+//				STMFLASH_Write(FLASH_SERIAL_NUM_LO, flash_buf, 2);
+				
 				}
-			}
+		}
 		else if(address == SERIALNUMBER_HIWORD)
 			{
-			if((SN_WR_Flag & 0x02) == 0x02)//first two bytes of SN have been written
-				return;
-			else
+			if((SN_WR_Flag & 0x02) != 0x02)//first two bytes of SN have been written
+//				return;
+//			else
 				{
 				SerialNumber(2) = *(bufadd+5);
 				SerialNumber(3) = *(bufadd+4);
@@ -839,9 +963,12 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 				write_eeprom(EEP_SERIALNUMBER_HIWORD, *(bufadd+5));
 				write_eeprom(EEP_SERIALNUMBER_HIWORD + 1, *(bufadd+4));					
 				write_eeprom(EEP_SERINALNUMBER_WRITE_FLAG, SN_WR_Flag);
-				flash_buf[0] = *(bufadd+5);
-  			flash_buf[1] = *(bufadd+4);		
-				STMFLASH_Write(FLASH_SERIAL_NUM_HI, flash_buf, 2);
+					
+				update_flag = 14;	
+//				flash_buf[0] = *(bufadd+5);
+//  			flash_buf[1] = *(bufadd+4);		
+//				STMFLASH_Write(FLASH_SERIAL_NUM_HI, flash_buf, 2);
+				
 				}
 			}			
 //	  else if(address == VERSION_NUMBER_HI)
@@ -851,6 +978,8 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 //		}
 		else if(address == TSTAT_ADDRESS)
 			{
+
+				
 			if(*(bufadd+5) >= EEP_MinAddress && *(bufadd+5) <= EEP_MaxAddress)		 
 				{ 
 				if((idlockflag == NEED_TO_UNLOCK)||(ID_Lock == ID_WRITE_ENABLE))
@@ -866,6 +995,7 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 					ID_Lock = ID_WRITE_DISABLE;//after ID write operation, lock ID automatically
 					write_eeprom(EEP_ID_WRITE_ENABLE, ID_WRITE_DISABLE);
 					//idlockflag = NEED_TO_LOCK;
+					update_flag = 12;	
 					}
 				else
 					idlockflag = NEED_TO_UNLOCK;
@@ -881,7 +1011,11 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 //			else
 //				{
 //				ProductModel = *(bufadd+5);
-//				write_eeprom(EEP_PRODUCT_MODEL, PM_TSTAT8);					
+//				#ifdef TSTAT7_ARM
+//				write_eeprom(EEP_PRODUCT_MODEL, PM_TSTAT7_ARM);	
+//				#else
+//				write_eeprom(EEP_PRODUCT_MODEL, PM_TSTAT8);	
+//				#endif					
 //				SN_WR_Flag |= 0x04;	
 //				write_eeprom(EEP_SERINALNUMBER_WRITE_FLAG, SN_WR_Flag);
 //				}
@@ -892,8 +1026,8 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 			UpdateState = *(bufadd+5);
 			if(UpdateState == 142)
 			{
-				
-				initialize_eeprom( ) ; // set default parameters
+				update_flag = 16;
+				//initialize_eeprom( ) ; // set default parameters
 				write_eeprom(EEP_SERINALNUMBER_WRITE_FLAG, 0);
 				SN_WR_Flag = 0;	
 		//		DisRestart( );
@@ -915,9 +1049,9 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 
 		else if(address == HARDWARE_REV)
 			{
-			if((SN_WR_Flag & 0x08) == 0x08)//first two bytes of SN have been written
-				return;
-			else
+			if((SN_WR_Flag & 0x08) != 0x08)//first two bytes of SN have been written
+//				return;
+//			else
 				{
 				HardwareVersion = *(bufadd+5);
 				write_eeprom(EEP_HARDWARE_REV, HardwareVersion);					
@@ -970,15 +1104,49 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 				write_eeprom(ADDRESS_PLUG_N_PLAY, *(bufadd+5));
 			}
 		}			
-			
-			
+		else if(address == WIFI_FAC)
+		{
+			if(*(bufadd+5) == 1)
+				update_flag = 22;
+		}
+		else if(address == MODBUS_MAX_MASTER)
+		{
+			if(*(bufadd+5) > 1)
+			{
+				MAX_MASTER = *(bufadd+5);
+				write_eeprom(EEP_MAX_MASTER,*(bufadd+5));
+			}
+		}	
+	
+#ifdef TSTAT_ZIGBEE		
+		else if(address == MODBUS_ZIGBEE_ID)
+		{
+			zigbee_id_temp = (uint16)(*(bufadd+4))*256 + *(bufadd+5);
+			update_flag = 18;
+		}
+
+#endif
+
+		else if(address == MODBUS_DELTA_TEM1)
+		{
+			Delta_tem_source1 = *(bufadd+5);
+			write_eeprom(EEP_DELTA_TEM1, Delta_tem_source1);
+		}
+		else if(address == MODBUS_DELTA_TEM2)
+		{
+			Delta_tem_source2 = *(bufadd+5);
+			write_eeprom(EEP_DELTA_TEM2, Delta_tem_source2);
+		}
+
+		
 		else if(address == COOLHEATMODE)
 		{
 //			if(EEP_HeatCoolConfig == HC_CTL_USER)
 //			{
 				heat_cool_user = *(bufadd+5);
 				write_eeprom(EEP_HC_USER, heat_cool_user);
-			  write_eeprom(EEP_HEAT_COOL_CONFIG, heat_cool_user);
+			  EEP_HeatCoolConfig = HC_CTL_USER; 
+			  write_eeprom(EEP_HEAT_COOL_CONFIG, HC_CTL_USER);
 			#ifndef TSTAT7_ARM
 			  icon.heatcool = 1;
 				icon.sysmode = 1;
@@ -1380,30 +1548,37 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 				#endif
 				 if(*(bufadd+5) == 1)//BACNET PROTOCOL
 					{
+						update_flag = 11;
 						if(zigbee_alive == 0)
 						{
-							modbus.com_config[0] = BAC_MSTP;
+							Modbus.com_config[0] = BAC_MSTP;
+							protocol_select = 1;
 							write_eeprom(EEP_PROTOCOL_SEL, 1);
+							write_eeprom(EEP_OUTPUT_MANU_ENABLE, 0);
+							EEP_OutputManuEnable = 0;
+							Check_All_WR();
 							//uart1_init(19200);
 							Recievebuf_Initialize(0);
 						}
 					}
 					if(*(bufadd+5) == 0)//switch to modbus protocol
 					{
-						modbus.com_config[0] = MODBUS;
+						Modbus.com_config[0] = MODBUS;
+						protocol_select = 0;
+						update_flag = 4;
 						write_eeprom(EEP_PROTOCOL_SEL, 0);
-						if(EEP_Baudrate == BAUDRATE_19200)
-							uart1_init(19200);
-						else if(EEP_Baudrate == BAUDRATE_9600)
-							uart1_init(9600);
-						else if(EEP_Baudrate == BAUDRATE_38400)
-							uart1_init(38400);
-						else if(EEP_Baudrate == BAUDRATE_57600)
-							uart1_init(57600);
-						else if(EEP_Baudrate == BAUDRATE_115200)
-							uart1_init(115200);
-						else if(EEP_Baudrate == BAUDRATE_76800)
-							uart1_init(76800);
+//						if(EEP_Baudrate == BAUDRATE_19200)
+//							uart1_init(19200);
+//						else if(EEP_Baudrate == BAUDRATE_9600)
+//							uart1_init(9600);
+//						else if(EEP_Baudrate == BAUDRATE_38400)
+//							uart1_init(38400);
+//						else if(EEP_Baudrate == BAUDRATE_57600)
+//							uart1_init(57600);
+//						else if(EEP_Baudrate == BAUDRATE_115200)
+//							uart1_init(115200);
+//						else if(EEP_Baudrate == BAUDRATE_76800)
+//							uart1_init(76800);
 					}		
 			}
 		else if((address == TEMPRATURE_CHIP)||(address == INTERNAL_THERMISTOR))
@@ -1427,6 +1602,12 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 						Calibration_Internal_LO = internal_calibration&0xFF ;
 						Calibration_Internal_HI = internal_calibration>>8; 
 					}
+					else if(EEP_TempSelect == TEMP_HUM_TEMPERATURE)
+					{
+					  Hum_T_calibration = (int8)(temp - htu_temp);
+						write_eeprom( EEP_CALIBRATION , Hum_T_calibration) ;
+					}
+					
 				}
 		}			
 
@@ -1501,10 +1682,13 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 			if(GetByteBit(&EEP_InputManuEnable,(address - ANALOG_INPUT1_VALUE)))
 				{ 
 				//mul_analog_input[address - ANALOG_INPUT1_VALUE) = temp;//
-				write_eeprom((MANUAL_ANALOG1_HI + (address-ANALOG_INPUT1_VALUE)*2), *(bufadd+4)); 
-				write_eeprom((MANUAL_ANALOG1_LO + (address-ANALOG_INPUT1_VALUE)*2) , *(bufadd+5));
-				ManualAI_HI(address - ANALOG_INPUT1_VALUE) = *(bufadd+4);
-				ManualAI_LO(address - ANALOG_INPUT1_VALUE) = *(bufadd+5);						
+					if(temp != (((uint16)ManualAI_HI(address - ANALOG_INPUT1_VALUE) << 8) + ManualAI_LO(address - ANALOG_INPUT1_VALUE)))
+					{
+						write_eeprom((MANUAL_ANALOG1_HI + (address-ANALOG_INPUT1_VALUE)*2), *(bufadd+4)); 
+						write_eeprom((MANUAL_ANALOG1_LO + (address-ANALOG_INPUT1_VALUE)*2) , *(bufadd+5));
+						ManualAI_HI(address - ANALOG_INPUT1_VALUE) = *(bufadd+4);
+						ManualAI_LO(address - ANALOG_INPUT1_VALUE) = *(bufadd+5);
+					}					
 				}
 			else
 				{
@@ -1520,17 +1704,14 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 				}			
 			}
 
-//		else if(address == EXTERNAL_SENSOR1)	
-//			{
-//			temp = ((int16)*(bufadd+4)<<8) + *(bufadd+5);
-//			if(temp > mul_analog_in_buffer[9])
-//				co2_calibration_data = temp - mul_analog_in_buffer[9); //positive value
-//			else
-//				co2_calibration_data = mul_analog_in_buffer[9) - temp + 3000; //negtive value
-//			
-//			write_eeprom((EEP_CO2_CALIBRATION + 1),(co2_calibration_data>>8)& 0xff);
-//			write_eeprom(EEP_CO2_CALIBRATION, (co2_calibration_data&0xff)); 
-//			}	
+		else if(address == EXTERNAL_SENSOR1)	
+			{
+			temp = ((int16)*(bufadd+4)<<8) + *(bufadd+5);
+			co2_calibration_data = temp - co2_data_org; //positive value
+				
+			write_eeprom((EEP_CO2_CALIBRATION + 1),(co2_calibration_data>>8)& 0xff);
+			write_eeprom(EEP_CO2_CALIBRATION, (co2_calibration_data&0xff)); 
+			}	
 
 		else if(address == EXTERNAL_SENSOR2)	
 			{
@@ -1553,12 +1734,17 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 			write_eeprom(EEP_FILTER,*(bufadd+5));							
 			}				
 
-		else if((address >= INPUT1_FILTER)	&& (address <= INPUT8_FILTER))
+		else if((address >= INPUT1_FILTER)	&& (address <= HUM_FILTER))
 			{
 			write_eeprom(EEP_INPUT1_FILTER + address - INPUT1_FILTER ,*(bufadd+5));							
 			InputFilter(address - INPUT1_FILTER) = *(bufadd+5);						
 			}			
-
+    else if(address == CALIBRATION)
+		{
+			Hum_T_calibration = *(bufadd+5);	
+			write_eeprom(EEP_CALIBRATION, Hum_T_calibration);	
+		}
+		
 		else if(address == CALIBRATION_INTERNAL_THERMISTOR)
 			{
 				#ifdef TSTAT7_ARM
@@ -2011,19 +2197,19 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 
 		else if(address == TABLE2_THREE)
 			{
-			Table2_HalfThree_LO = *(bufadd+5);
-			Table2_HalfThree_HI = *(bufadd+4);				
-			write_eeprom(EEP_TABLE2_HALFTHREE ,*(bufadd+5));							
-			write_eeprom(EEP_TABLE2_HALFTHREE + 1 ,*(bufadd+4));						
-			}				
-
-		else if(address == TABLE2_THREE)
-			{
 			Table2_Three_LO = *(bufadd+5);
 			Table2_Three_HI = *(bufadd+4);				
 			write_eeprom(EEP_TABLE2_THREE ,*(bufadd+5));							
 			write_eeprom(EEP_TABLE2_THREE + 1 ,*(bufadd+4));						
-			}	
+			}				
+
+//		else if(address == TABLE2_THREE)
+//			{
+//			Table2_Three_LO = *(bufadd+5);
+//			Table2_Three_HI = *(bufadd+4);				
+//			write_eeprom(EEP_TABLE2_THREE ,*(bufadd+5));							
+//			write_eeprom(EEP_TABLE2_THREE + 1 ,*(bufadd+4));						
+//			}	
 
 		else if(address == TABLE2_HALFFOUR)
 			{
@@ -2103,13 +2289,16 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 
 		else if(address == TSTAT_DIGITAL_OUTPUT_STATUS)
 			{
-			write_eeprom(MANUAL_RELAY,*(bufadd+5));
-			ManualRelayAll = *(bufadd+5);
-			for(j=0;j<5;j++)
+				if(ManualRelayAll != *(bufadd+5))
 				{
-				ManualRelay(j) = GetByteBit(&ManualRelayAll,j);
-				write_eeprom(EEP_MANU_RELAY1+j, ManualRelay(j));	
+					write_eeprom(MANUAL_RELAY,*(bufadd+5));
+					ManualRelayAll = *(bufadd+5);
 				}
+//			for(j=0;j<5;j++)
+//				{
+//				ManualRelay(j) = GetByteBit(&ManualRelayAll,j);
+//				write_eeprom(EEP_MANU_RELAY1+j, ManualRelay(j));	
+//				}
 			}				
 
 		else if(address == TSTAT_COOLING_VALVE)
@@ -2235,15 +2424,23 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 		else if(address == OUTPUT_MANU_ENABLE)
 			{
 			EEP_OutputManuEnable = *(bufadd+5);
-			write_eeprom(EEP_OUTPUT_MANU_ENABLE,*(bufadd+5));	
+			write_eeprom(EEP_OUTPUT_MANU_ENABLE,*(bufadd+5));			
 			}					
 
 		else if((address >= MANU_RELAY1) && (address <= MANU_RELAY5))
 			{
-			ManualRelay(address - MANU_RELAY1) = *(bufadd+5);
-			write_eeprom(EEP_MANU_RELAY1 + address - MANU_RELAY1, *(bufadd+5));	
-			SetByteBit(&ManualRelayAll,address - MANU_RELAY1, *(bufadd+5));
-			write_eeprom(MANUAL_RELAY, ManualRelayAll);
+//			ManualRelay(address - MANU_RELAY1) = *(bufadd+5);
+//			write_eeprom(EEP_MANU_RELAY1 + address - MANU_RELAY1, *(bufadd+5));	
+				if((b.eeprom[EEP_RANGE_OUTPUT1 + address - MANU_RELAY1]) == OUTPUT_RANGE_PWM)
+				{
+					write_eeprom(EEP_MANU_RELAY1 + address - MANU_RELAY1, *(bufadd+5));	
+					ManualRelay(address - MANU_RELAY1) = *(bufadd+5);
+				}	
+				else
+				{
+					SetByteBit(&ManualRelayAll,address - MANU_RELAY1, *(bufadd+5));
+					write_eeprom(MANUAL_RELAY, ManualRelayAll);
+				}
 			}				
 			
 		else if(address == MANUAL_AO1)
@@ -2642,17 +2839,35 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 //	UNOCCUPIED_COOLING,//
 //	RH_SETPOINT,//
 // 	CURRENT1_SETPOINT,//  tbd  get rid of this
+
+		else if(address == SETPOINT_UNLIMIT)
+		{
+		  SetpointUNLimit = *(bufadd+5);
+			write_eeprom(EEP_SETPOINT_UNLIMIT,*(bufadd+5));
+		}
 			
 		else if(address == TEMP_SELECT )
 			{
-			EEP_TempSelect = *(bufadd+5);
-			write_eeprom(EEP_TEMP_SELECT,*(bufadd+5));		 
+				EEP_TempSelect = *(bufadd+5);
+				write_eeprom(EEP_TEMP_SELECT,*(bufadd+5));	
+				if( EEP_TempSelect == PID_DELTA_TEMPERATURE)		
+					SetpointUNLimit = 1;
+				else 	
+          			SetpointUNLimit = 0;
+				
+				write_eeprom(EEP_SETPOINT_UNLIMIT,SetpointUNLimit);
 			}	
 			
 		else if(address == INPUT1_SELECT )
 			{
 			EEP_Input1Select = *(bufadd+5);
-			write_eeprom(EEP_INPUT1_SELECT,*(bufadd+5));		 
+			write_eeprom(EEP_INPUT1_SELECT,*(bufadd+5));
+			if(EEP_Input1Select == PID_DELTA_TEMPERATURE)		
+				SetpointUNLimit = 1;
+			else 	
+				SetpointUNLimit = 0;
+			
+			write_eeprom(EEP_SETPOINT_UNLIMIT,SetpointUNLimit);				
 			}	
 
 		else if(address == COOLING_PTERM )
@@ -2885,7 +3100,27 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 			Day2_Event4_LO = *(bufadd+5);
 			write_eeprom(EEP_DAY2_EVENT4_LO,*(bufadd+5));		 
 			}					
+//		else if(address == IP_MODE )
+//			{
+//				IPmode = *(bufadd+5);
+//				write_eeprom(EEP_IP_MODE,*(bufadd+5));
+//				if(*(bufadd+5) == 0)
+//					update_flag = 25;
+//			}	
+//		else if((address >= GHOST_IP_ADDR_1) && (address <= GHOST_IP_ADDR_4))
+//		{
+//			if(IPmode == WIFI_STATIC_IP)//if it is static IP mode, allow user change IP address
+//			{
+//				IPnum(address - GHOST_IP_ADDR_1) = *(bufadd+5);
+//				write_eeprom(EEP_IP1 + address - GHOST_IP_ADDR_1,*(bufadd+5));
+//			}				
+//		}	
 
+//    	else if(address == GHOST_WRITE_EN)		
+//		{
+//			if((*(bufadd+5) == 1)&&(IPmode == WIFI_STATIC_IP))
+//				update_flag = 24;
+//		}
 		else if(address == LCD_TURN_OFF )
 			{
 				LCDTurnOff = *(bufadd+5);
@@ -3028,7 +3263,8 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 			Calibration_CO2_HI = *(bufadd+4);
 			Calibration_CO2_LO = *(bufadd+5);
 			write_eeprom(EEP_CO2_CALIBRATION + 1, *(bufadd+4));
-			write_eeprom(EEP_CO2_CALIBRATION, *(bufadd+5));				
+			write_eeprom(EEP_CO2_CALIBRATION, *(bufadd+5));	
+      co2_calibration_data = ((int16)*(bufadd+4) << 8) + *(bufadd+5);				
 			}
 			
 		else if((address >= UNIVERSAL_OFF_TABLE_BEGIN ) && (address <= UNIVERSAL_OFF_TABLE_HEAT3))
@@ -3235,22 +3471,38 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 
 		else if(address == TSTAT_HEAT_COOL )
 			{
-// When setting HC to an analog input mode, make sure the corresponding AI is set to 1								
-			if (*(bufadd+5) == HC_ANALOG_IN1 && EEP_AnalogIn1 != 1)
-				{
-				EEP_AnalogIn1 = 1;
-				write_eeprom(EEP_ANALOG1_RANGE,EEP_AnalogIn1);
-				}
-				
-			// When setting HC to an analog input mode, make sure the corresponding AI is set to 1								
-			if (*(bufadd+5) == HC_ANALOG_IN2 && EEP_AnalogIn2 != 1)
-				{
-				EEP_AnalogIn2 = 1;
-				write_eeprom(EEP_ANALOG2_RANGE,EEP_AnalogIn2);
-				}	 
+				heat_cool_user = *(bufadd+5);
+				write_eeprom(EEP_HC_USER, heat_cool_user);
+				EEP_HeatCoolConfig = HC_CTL_USER;
+			  write_eeprom(EEP_HEAT_COOL_CONFIG, HC_CTL_USER);
+			#ifndef TSTAT7_ARM
+			  icon.heatcool = 1;
+				icon.sysmode = 1;
+			#endif
+//// When setting HC to an analog input mode, make sure the corresponding AI is set to 1								
+//			if (*(bufadd+5) == HC_ANALOG_IN1 && EEP_AnalogIn1 != 1)
+//				{
+//				EEP_AnalogIn1 = 1;
+//				write_eeprom(EEP_ANALOG1_RANGE,EEP_AnalogIn1);
+//				}
+//				
+//			// When setting HC to an analog input mode, make sure the corresponding AI is set to 1								
+//			if (*(bufadd+5) == HC_ANALOG_IN2 && EEP_AnalogIn2 != 1)
+//				{
+//				EEP_AnalogIn2 = 1;
+//				write_eeprom(EEP_ANALOG2_RANGE,EEP_AnalogIn2);
+//				}	 
 			}				
 
-		else if(address == INTERNAL_SENSOR_MANUAL )//0 = AUTO, 1 = MANUAL
+		
+		else if(address == CLEAR_EEPROM)
+		{
+			if(*(bufadd+5) == 1)
+				update_flag = 17;
+		
+		}			
+			
+			else if(address == INTERNAL_SENSOR_MANUAL )//0 = AUTO, 1 = MANUAL
 			{
 			EEP_InterThermistorManual = *(bufadd+5);
 			write_eeprom(EEP_INTERNAL_SENSOR_MANUAL, *(bufadd+5));		 
@@ -3366,12 +3618,29 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 			if(*(bufadd+5) == 1)
 				SoftReset();
 		}
+		
+		else if(address == CO2_SELF_CAL)
+		{
+			if(*(bufadd+5) == 1) //disable auto calibration
+			{
+				update_flag = 20;
+			}
+			else if(*(bufadd+5) == 0)
+			{
+				update_flag = 21;
+				write_eeprom(EEP_CO2_CALIBRATION + 1, 0);
+				write_eeprom(EEP_CO2_CALIBRATION, 0);	
+				co2_calibration_data = 0;
+			}
+		
+		}
 		else if(address == HUM_CALIBRATION)	
 			{
 			write_eeprom(EEP_HUM_CALIBRATION, *(bufadd+5));
 			write_eeprom(EEP_HUM_CALIBRATION+1, *(bufadd+4));
 			hum_cal_lo = *(bufadd+5);
 			hum_cal_hi = *(bufadd+4);
+			humidity_calibration = 0;
 			}
 		else if(address == SPARE1)
 			{
@@ -3511,10 +3780,7 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 				write_eeprom(EEP_SCHEDULE_MONDAY_FLAG + (address - SCHEDULE_MONDAY_FLAG_1 - 1)/2*3+2, *(bufadd+5));
 				ScheduleMondayFlag((address - SCHEDULE_MONDAY_FLAG_1 - 1)/2*3 + 2) = *(bufadd+5);
 			}				
-//			write_eeprom(EEP_SCHEDULE_MONDAY_FLAG + (address - SCHEDULE_MONDAY_FLAG)*2, *(bufadd+5));
-//			write_eeprom(EEP_SCHEDULE_MONDAY_FLAG + (address - SCHEDULE_MONDAY_FLAG)*2 + 1, *(bufadd+4));
-//			ScheduleMondayFlag((address - SCHEDULE_MONDAY_FLAG)*2) = *(bufadd+5);
-//			ScheduleMondayFlag((address - SCHEDULE_MONDAY_FLAG)*2 + 1) = *(bufadd+4);
+			//Check_All_WR();
 		}
 		
 		else if((address >= SCHEDULE_DAY_BEGAIN)&&(address <= SCHEDULE_DAY_END))
@@ -3531,7 +3797,6 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 			 write_eeprom(EEP_AWAY_SP, *(bufadd+5));
 			 write_eeprom(EEP_AWAY_SP + 1, *(bufadd+4));
 		}
-		
 		else if(address == FRC_ENABLE)//free cooling  function enable/disable 0:DIABLE  1:ENABLE
 		{
 			write_eeprom(EEP_FRC_ENABLE, *(bufadd+5));
@@ -3852,14 +4117,32 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 			write_eeprom(EEP_4TO20MA_UNIT_LO + 1, *(bufadd+4));
 		}			
 		
-		else if(address == BAC_T1)
+		else if(address == BACNET_INSTANCE_LOW)
 		{
-		 if(*(bufadd+5) == 0)
-		 {
-			 for(j=0;j<8;j++)
-				write_eeprom(BAC_TEST1+j,0);
-		 }
+			write_eeprom(EEP_INSTANCE1, *(bufadd+5));
+			write_eeprom(EEP_INSTANCE2, *(bufadd+4));
+			Instance &= 0xffff0000;
+			Instance |= (*(bufadd+4))*256 + (*(bufadd+5));
+			
+			update_flag = 19;
 		}
+		else if(address == BACNET_INSTANCE_HIGH)
+		{
+			write_eeprom(EEP_INSTANCE3, *(bufadd+5));
+			write_eeprom(EEP_INSTANCE4, *(bufadd+4));
+			Instance &= 0x0000ffff;
+			Instance |= (((*(bufadd+4))*256 + (*(bufadd+5))) << 16);
+			update_flag = 19;
+		}
+		
+//		else if(address == BAC_T1)
+//		{
+//		 if(*(bufadd+5) == 0)
+//		 {
+//			 for(j=0;j<8;j++)
+//				write_eeprom(BAC_TEST1+j,0);
+//		 }
+//		}
 		else if(address == DTERM)		
 		{
 			EEP_DTERM1 = *(bufadd+5);
@@ -3871,58 +4154,49 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 			PidSampleTime = *(bufadd+5);
 			write_eeprom(EEP_PID_SAMPLE_TIME ,*(bufadd+5));
 		}			
-		
-		
-		else if(address == TSTAT_TEST1) 
+		else if((address >= TSTAT_TEST1) && (address <= TSTAT_TEST50))		
 		{
-			ctest[0] = *(bufadd+4) * 256 + *(bufadd+5);
+			Test[i] = (*(bufadd+4))*256 + (*(bufadd+5));
 		}
-
-		else if(address == TSTAT_TEST2) 
-		{
-			
-			ctest[1] = *(bufadd+5);
-			#ifdef COLOR_TEST
-			TSTAT8_BACK_COLOR = (*(bufadd+4))*256 + (*(bufadd+5)); 
-			write_eeprom(TEST3,*(bufadd+4));
-			write_eeprom(TEST3+1,*(bufadd+5));
-			SoftReset();
-			#endif
+		else if(address >= MODBUS_WIFI_START && address <= MODBUS_WIFI_END)
+		{Test[11]++;
+			write_wifi_data_by_block(address,0,bufadd,0);		 
 		}	
-		else if(address == TSTAT_TEST3) 
-		{
-			ctest[2] = *(bufadd+5);
-			#ifdef COLOR_TEST
-			TANGLE_COLOR = (*(bufadd+4))*256 + (*(bufadd+5)); 
-			write_eeprom(TEST4,*(bufadd+4));
-			write_eeprom(TEST5,*(bufadd+5));
-			#endif
-		}	
+//		else if(address == TSTAT_TEST1) 
+//		{
+//			#ifdef T7_ID_CHANGE
+//			if(*(bufadd+5) == 0)
+//			{
+//			 for(i=0;i<9;i++)
+//				{
+//					ctest[i] = 0;
+//					write_eeprom(TEST1+i, 0);
+//				}
+//			}
+//			#endif
+//		}
 
-//		else if(address == TSTAT_TEST4) 
+//		else if(address == TSTAT_TEST2) 
 //		{
-//			newpid.Kp = *(bufadd+4) * 256 + *(bufadd+5);
-//		}
-//		
-//		else if(address == TSTAT_TEST5) 
+//			
+//			#ifdef COLOR_TEST
+//			TSTAT8_BACK_COLOR = (*(bufadd+4))*256 + (*(bufadd+5)); 
+//			write_eeprom(TEST3,*(bufadd+4));
+//			write_eeprom(TEST3+1,*(bufadd+5));
+//			SoftReset();
+//			#endif
+//		}	
+//		else if(address == TSTAT_TEST3) 
 //		{
-//			newpid.Ki = *(bufadd+4) * 256 + *(bufadd+5);
-//		}
-//		
-//		else if(address == TSTAT_TEST6) 
-//		{
-//			newpid.Kd = *(bufadd+4) * 256 + *(bufadd+5);
-//		}
+//			
+//			#ifdef COLOR_TEST
+//			TANGLE_COLOR = (*(bufadd+4))*256 + (*(bufadd+5)); 
+//			write_eeprom(TEST4,*(bufadd+4));
+//			write_eeprom(TEST5,*(bufadd+5));
+//			#endif
+//		}	
+
 		
-//	TEST2,//
-//	TEST3,
-//	TEST4,//						
-//	TEST5,//
-//	TEST6,
-//	TEST7,
-//	TEST8,
-//	TEST9,
-//	TEST10,			
 	#ifdef HUM_CALIBRATION_ENABLE
 					else if(address == HUM_C_TEMP)
 						{
@@ -4022,6 +4296,8 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 		}
 			
 		}
+		
+		dealdata_flag = 0;
 }	
 
  
@@ -4029,62 +4305,155 @@ if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
 
 
 
+
+
 uint8 bkstate = 0;
 
 
-static void responseData(uint8  *bufadd, uint8 uartsel)
+static void responseData(uint8  *bufadd, uint8 uartsel, uint8 type)
 {
 	u8 num, i, temp1, temp2;
 	u16 send_cout = 0 ;
 	u16 address;
-//	u16 address_temp ;
-	//if(USART_RX_BUFB[1] == WRITE_VARIABLES)
-	if(*(bufadd+1) == WRITE_VARIABLES)
-		{	
-			if(uartsel == 0)
-			{
-				for(i = 0; i < rece_size; i++)
-					uart_send[send_cout++] = *(bufadd+i);
-			}
-			else
-			{
-				for(i = 0; i < rece_sizeB; i++)
-					uart_sendB[send_cout++] = *(bufadd+i);
+	u8 headlen = 0;
+	u16 TransID;
 
-			}				
+	if(type == WIFI)
+	{
+		headlen = UIP_HEAD;
+	}
+	else 
+		headlen = 0;
+	
+	if(*(bufadd + 1 + headlen) == WRITE_VARIABLES)
+	{	
+		if(type == WIFI)		
+		{ // for wifi			
+			
+			for(i = 0; i < 6; i++)
+				uart_sendB[UIP_HEAD + send_cout++] = *(bufadd + i + headlen);
+			
+			uart_sendB[0] = *bufadd;//0;			//	TransID
+			uart_sendB[1] = *(bufadd + 1);//TransID++;	
+			uart_sendB[2] = 0;			//	ProtoID
+			uart_sendB[3] = 0;
+			uart_sendB[4] = 0;	//	Len
+			uart_sendB[5] = 6;
+			
+			memcpy(modbus_wifi_buf,uart_sendB,UIP_HEAD + send_cout);
+			modbus_wifi_len = UIP_HEAD + send_cout;
+
+		}
+		else
+		{
+//			if(uartsel == 0)
+//			{
+//				for(i = 0; i < rece_size; i++)
+//					uart_send[send_cout++] = *(bufadd+i);
+//			}
+//			else
+//			{
+//				for(i = 0; i < rece_sizeB; i++)
+//					uart_sendB[send_cout++] = *(bufadd+i);
+
+//			}		
+      
+			
 				#ifdef TSTAT_ZIGBEE
 				if(uartsel == 0)
-					USART_SendDataString(send_cout);
+				{
+					if(type == BAC_TO_MODBUS)
+						memcpy(&bacnet_to_modbus,&uart_send[3],send_cout);
+					else
+						USART_SendDataString(send_cout);
+				}
 				else
 					USART_SendDataStringB(send_cout);
 				#else
-				  USART_SendDataString(send_cout);
+				
+				for(i = 0; i < rece_size; i++)
+					uart_send[send_cout++] = *(bufadd+i);
+
+				if(type == BAC_TO_MODBUS)
+					memcpy(&bacnet_to_modbus,&uart_send[3],send_cout);
+				else
+					USART_SendDataString(send_cout);
+				
 				#endif
+
 				return;
+			
+		}
+	}
+	else if(*(bufadd + 1 + headlen) == MULTIPLE_WRITE_VARIABLES)
+	{
+		if(type == WIFI)		
+		{ // for wifi			
+			
+			for(i = 0; i < 6; i++)
+				uart_sendB[UIP_HEAD + send_cout++] = *(bufadd + i + headlen);
+			
+			uart_sendB[0] = *bufadd;//0;			//	TransID
+			uart_sendB[1] = *(bufadd + 1);//TransID++;	
+			uart_sendB[2] = 0;			//	ProtoID
+			uart_sendB[3] = 0;
+			uart_sendB[4] = 0;	//	Len
+			uart_sendB[5] = 6;
+			
+			memcpy(modbus_wifi_buf,uart_sendB,UIP_HEAD + send_cout);
+			modbus_wifi_len = UIP_HEAD + send_cout;
 
 		}
-		
-	else if(*(bufadd+1) == MULTIPLE_WRITE_VARIABLES)
-		{
-		for(i = 0; i < 6; i++)
-			{
-			 if(uartsel == 0)
-				uart_send[send_cout++] = *(bufadd+i) ;
-			 else
-				uart_sendB[send_cout++] = *(bufadd+i) ; 
-			crc16_byte(*(bufadd+i));
-			}
-		#ifdef TSTAT_ZIGBEE	
-		if(uartsel == 0)	
-			USART_SendDataString(send_cout);	
 		else
-			USART_SendDataStringB(send_cout);
-		#else
-			USART_SendDataString(send_cout);	
-		#endif
+		{
+			for(i = 0; i < 6; i++)
+			{
+				if(uartsel == 0)
+					uart_send[send_cout++] = *(bufadd+i) ;
+				else
+					uart_sendB[send_cout++] = *(bufadd + i + headlen) ; 
+				crc16_byte(*(bufadd+i));
+			}
+				
+#ifdef TSTAT_ZIGBEE	
+			if(uartsel == 0)
+			{		
+				if(type == BAC_TO_MODBUS)
+					memcpy(&bacnet_to_modbus,&uart_send,send_cout);			
+				else
+					USART_SendDataString(send_cout);	
+			}
+			else
+				USART_SendDataStringB(send_cout);
+#else
+			
+				uart_sendB[0] = *bufadd;//0;			//	TransID
+				uart_sendB[1] = *(bufadd + 1);//TransID++;	
+				uart_sendB[2] = 0;			//	ProtoID
+				uart_sendB[3] = 0;
+				uart_sendB[4] = 0;	//	Len
+				uart_sendB[5] = 6;		
+			
+				if(uartsel == 0)
+				{		
+					if(type == BAC_TO_MODBUS)
+						memcpy(&bacnet_to_modbus,&uart_send,send_cout);			
+					else
+						USART_SendDataString(send_cout);	
+				}
+				else
+				{
+					//USART_SendDataStringB(send_cout);
+					//ESP8266_SendString (DISABLE, (uint8_t *)&uart_sendB, send_cout+UIP_HEAD,cStr[7] - '0' );
+						memcpy(modbus_wifi_buf,uart_sendB,UIP_HEAD + send_cout);
+						modbus_wifi_len = UIP_HEAD + send_cout;
+				}	
+#endif
 		}
 
-	else if(*(bufadd+1) == READ_VARIABLES)
+	}
+
+	else if(*(bufadd + 1 + headlen) == READ_VARIABLES)
 		{
 //			if(*(bufadd) == 0)//zigbee info
 //			{
@@ -4102,62 +4471,61 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 //			}
 //			else
 //			{
-			num = *(bufadd+5);
+			num = *(bufadd + 5 + headlen);
 			if(uartsel == 0)	
 			{			
-			uart_send[send_cout++] = *(bufadd) ;
-			uart_send[send_cout++] = *(bufadd+1) ;
-			uart_send[send_cout++] = (*(bufadd+5)<<1);
+				uart_send[send_cout++] = *(bufadd) ;
+				uart_send[send_cout++] = *(bufadd+1) ;
+				uart_send[send_cout++] = (*(bufadd+5)<<1);
 			}
-			else
+			else//zigbee
 			{
-			uart_sendB[send_cout++] = *(bufadd) ;
-			uart_sendB[send_cout++] = *(bufadd+1) ;
-			uart_sendB[send_cout++] = (*(bufadd+5)<<1);		
+			//#ifdef TSTAT_WIFI
+				uart_sendB[UIP_HEAD + send_cout++] = *(bufadd + headlen);
+				uart_sendB[UIP_HEAD + send_cout++] = *(bufadd+1 + headlen) ;
+				uart_sendB[UIP_HEAD + send_cout++] = (*(bufadd +5 + headlen)<<1);
+			//#endif //TSTAT_WIFI
 			}
-			crc16_byte(*(bufadd));
-			crc16_byte(*(bufadd+1));
-			crc16_byte((*(bufadd + 5)<<1));
+			crc16_byte(*(bufadd + headlen));
+			crc16_byte(*(bufadd +1 + headlen));
+			crc16_byte((*(bufadd + 5 + headlen)<<1));
 			
 
 			for(i = 0; i < num; i++)
-				{
-					address = (u16)((*(bufadd+2))<<8) + (*(bufadd+3)) + i;
-
+			{
+				address = (u16)((*(bufadd + 2 + headlen))<<8) + (*(bufadd + 3 + headlen)) + i;
 					
 				if(address <= SERIALNUMBER_HIWORD + 1)
-					{
+				{
 					temp1 = 0 ;
 					temp2 = SerialNumber(address) ;
-					}	
-					
-					
+				}					
 				else if(address == VERSION_NUMBER_LO)
-					{
+				{
 					temp1 = (EEPROM_VERSION >> 8) & 0xff;
 					temp2 = EEPROM_VERSION & 0xff;		
-					}				
-
+				}	
 				else if(address == VERSION_NUMBER_HI)
-					{
+				{
 					temp1 = 0;//(EEPROM_VERSION >> 8) & 0xff;
 					temp2 = 0;//FirmwareVersion_HI;			
-					}	
-					
+				}					
 				else if(address == TSTAT_ADDRESS)
-					{
+				{
 					temp1 = 0; ;
 					temp2 = laddress;
-					}
+				}
 				else if(address == PRODUCT_MODEL)
-					{
+				{
 					temp1 = 0 ;
-					#ifndef TSTAT7_ARM
-					temp2 = PM_TSTAT8;
-					#else
-					temp2 = PM_TSTAT7_ARM;
-					#endif
-					}
+					temp2 = ProductModel;	
+						
+//					#ifndef TSTAT7_ARM
+//					temp2 = PM_TSTAT8;
+//					#else
+//					temp2 = PM_TSTAT7_ARM;
+//					#endif
+				}
 				else if(address == HARDWARE_REV)
 					{
 					temp1 = 0 ;
@@ -4191,17 +4559,38 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 					}	
 				else if(address == HARDWARE_INFORMATION)
 					{
+					#ifdef TSTAT_CO2	
+					temp1 = 0;//Hardware_Info_HI;
+					temp2 = 7;//Hardware_Info_LO;
+					#else
 					temp1 = Hardware_Info_HI;
 					temp2 = Hardware_Info_LO;
-
+					#endif
 					}	
+				else if(address == MODBUS_BACNET_SWITCH)
+				{
+					temp1 = 0;
+					temp2 = protocol_select;
+//				  if(modbus.com_config[0] == MODBUS)		
+//						temp2 = 10;
+//					else if(modbus.com_config[0] == BAC_MSTP)
+//						temp2 = 11;
+				}					
+					
 				else if(address == ISP_MODE_INDICATION)
 					{
 					temp1 = 0;
 					temp2 = 0;
 					}			
 
-#ifdef TSTAT_ZIGBEE					
+#ifdef TSTAT_ZIGBEE	
+
+				else if(address == MODBUS_ZIGBEE_ID)
+				{
+					temp1 = (zigbee_id >> 8);
+					temp2 =  zigbee_id & 0xff;
+				}
+					
 				else if(address == MODBUS_ZIGBEE_INDEX)
 					{
 					temp1 = 0;
@@ -4213,7 +4602,36 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 					temp1 = 0;
 					temp2 = zigbee_point_info[address - MODBUS_ZIGBEE_INFO1];
 					}		
-#endif					
+#endif			
+
+        else if(address == MODBUS_DELTA_TEM1) 
+				{
+					temp1 = 0 ;
+					temp2 = Delta_tem_source1;
+				}					
+
+        else if(address == MODBUS_DELTA_TEM2) 
+				{
+					temp1 = 0 ;
+					temp2 = Delta_tem_source2;
+				}		
+
+        else if(address == MODBUS_DELTA_TEMPERATURE) 
+				{
+					temp1 = (delta_temperature >> 8) & 0xff;
+					temp2 = delta_temperature & 0xff;
+				}					
+				
+				else if(address == WIFI_FAC)
+				{
+					temp1 = 0 ;
+					temp2 = update_flag;
+				}
+				else if(address == MODBUS_MAX_MASTER)
+				{
+					temp1 = 0 ;
+					temp2 = MAX_MASTER;
+				}
 				else if(address == COOLHEATMODE)
 					{
 					temp1 = 0 ;
@@ -4451,33 +4869,33 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 
 					}	
 
-				else if((address >= INPUT1_FILTER) && (address <= INPUT8_FILTER))// 
+				else if((address >= INPUT1_FILTER) && (address <= HUM_FILTER))// 
 					{
 					temp1 = 0;//(>> 8) & 0xff;//
 					temp2 = InputFilter(address - INPUT1_FILTER);
 
 					}	
 					
-				else if(address == CO2_FILTER)// 
+//				else if(address == CO2_FILTER)// 
+//					{
+//					temp1 = 0;//(>> 8) & 0xff;//
+//					temp2 = CO2_Filter;
+
+//					}					
+
+//				else if(address == HUM_FILTER)// 
+//					{
+//					temp1 = 0;//(>> 8) & 0xff;//
+//					temp2 = HUM_Filter;
+
+//					}
+
+				else if(address == CALIBRATION)// 
 					{
-					temp1 = 0;//(>> 8) & 0xff;//
-					temp2 = CO2_Filter;
+					temp1 = ((int16)Hum_T_calibration>> 8) & 0xff;//
+					temp2 = (int16)Hum_T_calibration & 0xff;
 
-					}					
-
-				else if(address == HUM_FILTER)// 
-					{
-					temp1 = 0;//(>> 8) & 0xff;//
-					temp2 = HUM_Filter;
-
-					}
-
-	//			else if(address == CALIBRATION)// 
-	//				{
-	//				temp1 = 0;//(>> 8) & 0xff;//
-	//				temp2 = HUM_Filter;
-
-	//				}				
+					}				
 
 				else if(address == CALIBRATION_INTERNAL_THERMISTOR)// 
 					{
@@ -4806,8 +5224,8 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 						}							
 					else
 						{
-						temp1 = (valve[0]>> 8) & 0xFF;
-						temp2 = valve[0] & 0xFF;					
+						temp1 = (valve[0] >> 8)&0xff;//((uint16)output_priority[MAX_BOS][7]>> 8) & 0xFF;
+						temp2 = valve[0] & 0xff;//(uint16)output_priority[MAX_BOS][7] & 0xFF;					
 						}
 						
 
@@ -4825,8 +5243,8 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 						}							
 					else
 						{
-						temp1 = (valve[1]>> 8) & 0xFF;
-						temp2 = valve[1] & 0xFF;					
+						temp1 = (valve[1] >> 8)&0xff;//((uint16)output_priority[MAX_BOS][7]>> 8) & 0xFF;
+						temp2 = valve[1] & 0xff;//(uint16)output_priority[MAX_BOS][7] & 0xFF;				
 						}
 						
 
@@ -4964,8 +5382,10 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 				else if((address >= MANU_RELAY1) && (address <= MANU_RELAY5))// 
 					{
 					temp1 = 0;//(>> 8) & 0xff;//
-					temp2 = ManualRelay(address - MANU_RELAY1);//GetByteBit(&ManualRelay, (address - MANU_RELAY1));
-
+					if((b.eeprom[EEP_RANGE_OUTPUT1 + address - MANU_RELAY1]) == OUTPUT_RANGE_PWM)
+						temp2 = ManualRelay(address - MANU_RELAY1);
+					else
+						temp2 = GetByteBit(&ManualRelayAll,address - MANU_RELAY1);//ManualRelay(address - MANU_RELAY1);//GetByteBit(&ManualRelay, (address - MANU_RELAY1));
 					}
 					
 				else if(address == MANUAL_AO1)// 
@@ -5141,7 +5561,6 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 					{
 					temp1 = 0;//(>> 8) & 0xff;//
 					temp2 = FanTable3(address - FAN3_OPER_TABLE_COAST);
-
 					}					
 				
 				else if((address >= FANAUT_OPER_TABLE_COAST) && (address <= FANAUT_OPER_TABLE_HEAT3))// 
@@ -5364,7 +5783,11 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 					temp2 = EEP_FreezeSetpoint;
 
 					}	
-
+				else if(address == SETPOINT_UNLIMIT)
+				{
+					temp1 = 0;//(>> 8) & 0xff;//
+					temp2 = SetpointUNLimit;
+				}
 				
 				else if(address == TEMP_SELECT)// 
 					{
@@ -5383,7 +5806,7 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 				else if(address == COOLING_PID)// 
 					{
 					temp1 = 0;//(>> 8) & 0xff;//
-					temp2 = pid[0] & 0xFF;
+					temp2 = (100 - pid[0]) & 0xFF;
 
 					}				
 
@@ -5418,7 +5841,9 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 				else if(address == TSTAT_PID_UNIVERSAL)// 
 					{
 					temp1 = 0;//(>> 8) & 0xff;//
-					temp2 = pid[1] & 0xFF;
+
+					temp2 = (100 - pid[1]) & 0xFF;
+					
 
 					}					
 		
@@ -5936,7 +6361,7 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 				}					
 
 				
-				else if(address == PWM_OUT1)
+				else if(address == PWM_OUT2)
 				{
 					temp1 = 0;
 					temp2 = pwm1_percent[1];
@@ -6018,8 +6443,8 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 					
 				else if(address == CO2_CALIBRATION) //
 					{
-					temp1 = Calibration_CO2_HI;
-					temp2 = Calibration_CO2_LO;
+					temp1 = (co2_calibration_data >> 8)& 0xff;//Calibration_CO2_HI;
+					temp2 = co2_calibration_data & 0xff;//Calibration_CO2_LO;
 			
 					}
 					
@@ -6220,7 +6645,7 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 				else if(address == PID3_OUTPUT) //
 					{
 					temp1 = 0;
-					temp2 = pid[2];
+					temp2 = 100 - pid[2];
 			
 					}				
 
@@ -6364,7 +6789,14 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 					temp1 = 0;
 					temp2 = Show_ID_Enable;
 			
-					}				
+					}	
+
+				else if(address == CO2_SELF_CAL)	
+				{
+					temp1 = 0;
+					temp2 = CO2_AutoCal;
+					
+				}					
 
 				else if(address == TRANSDUCER_RANGE_MIN) //
 					{
@@ -6394,12 +6826,12 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 			
 					}	
 
-//				else if(address == HUM_CALIBRATION) //
-//					{
-//					temp1 = hum_cal_hi;
-//					temp2 = hum_cal_lo;
-//			
-//					}	
+				else if(address == HUM_CALIBRATION) //
+					{
+					temp1 = hum_cal_hi;
+					temp2 = hum_cal_lo;
+			
+					}	
 //				
 				else if(address == DTERM) //
 					{
@@ -6473,76 +6905,20 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 //					temp2 = HumLock;		
 //					}	
 					
-				else if(address == TSTAT_TEST1) //
-					{
-					temp1 = (ctest[0] >> 8) & 0xff;
-					temp2 = ctest[0] & 0xff;			
-					}
-
-				else if(address == TSTAT_TEST2) //
-					{
-					temp1 = (ctest[1] >> 8) & 0xff;
-					temp2 = ctest[1] & 0xff;
-			
-					}
+				else if((address >= TSTAT_TEST1) && (address <= TSTAT_TEST50)) //
+				{	
+					temp1 = (Test[address - TSTAT_TEST1]  >> 8) & 0xff;
+					temp2 = Test[address - TSTAT_TEST1]  & 0xff;					
+				}
+				else if(address >= MODBUS_WIFI_START &&  address <= MODBUS_WIFI_END)
+			 {
+					U16_T far temp;
+					temp = read_wifi_data_by_block(address);
 					
-				else if(address == TSTAT_TEST3) //
-					{
-					temp1 = (ctest[2] >> 8) & 0xff;
-					temp2 = ctest[2] & 0xff;			
-					}
-					
-				else if(address == TSTAT_TEST4) //
-					{
-					temp1 = (ctest[3] >> 8) & 0xff;
-					temp2 = ctest[3] & 0xff;
-					}
+					temp1 = (temp >> 8) & 0xFF;
+					temp2 = temp & 0xFF;
 
-				else if(address == TSTAT_TEST5) //
-					{
-					temp1 = (ctest[4] >> 8) & 0xff;
-					temp2 = ctest[4] & 0xff;		
-					}
-					
-				else if(address == TSTAT_TEST6) //
-					{
-					temp1 = (ctest[5] >> 8) & 0xff;
-					temp2 = ctest[5] & 0xff;			
-					}	
-
-				else if(address == TSTAT_TEST7) //
-					{
-					temp1 = (ctest[6] >> 8) & 0xff;
-					temp2 = ctest[6] & 0xff;
-					}	
-
-				else if(address == TSTAT_TEST8) //
-					{
-					temp1 = (ctest[7] >> 8) & 0xff;
-					temp2 = ctest[7]  & 0xff;
-			
-					}					
-
-				else if(address == TSTAT_TEST9) //
-					{
-					temp1 = (ctest[8] >> 8) & 0xff;
-					temp2 = ctest[8]  & 0xff;
-			
-					}			
-
-				else if(address == TSTAT_TEST10) //
-					{
-					temp1 = (ctest[9] >> 8) & 0xff;
-					temp2 = ctest[9]  & 0xff;				
-					}							
-					
-					
-				else if(address == SPARE1)
-					{
-					temp1 = 0;//(ctest1 >> 8) & 0xff;
-					temp2 = SN_WR_Flag & 0xff;
-
-					}
+			 }	
 
 				
 				
@@ -6676,7 +7052,7 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 				{
 					temp1 = 0;
 					temp2 =  ScheduleMondayEvent1(address - SCHEDULE_MONDAY_EVENT1_H);
-			
+			    
 				}
 
 				else if((address >= SCHEDULE_TUESDAY_EVENT1_H)&&(address <= SCHEDULE_TUESDAY_EVENT6_M))
@@ -6800,10 +7176,9 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 				}
 	
 				else if(address == FRC_SPACETEM_LASTUPDATE)//1004 FREE COOLING SPACE TEMPERATURE LAST UPDATE TIME, UNIT: MINUTS
-					{
+				{
 					temp1 = 0;
-					temp2 = 60 - spacetem.update ;
-			
+					temp2 = 60 - spacetem.update ;			
 				}
 				else if(address == FRC_SPACETEM_STATUE)//1005 CHECK IF SPACE TEMPERATURE SOURCE IS WORK WELL
 					{
@@ -7062,10 +7437,15 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 					temp2 = Station_NUM;
 				}	
 
-				else if(address == BACNET_INSTANCE)
+				else if(address == BACNET_INSTANCE_LOW)
 				{
-					temp1 = Instance >> 8;
+					temp1 = (Instance >> 8) & 0XFF;
 					temp2 = Instance & 0xff;
+				}
+				else if(address == BACNET_INSTANCE_HIGH)
+				{
+					temp1 = (Instance >> 24) & 0XFF;
+					temp2 = (Instance>>16) & 0xff;
 				}
 				
 				else if(address == MODBUS_4TO20MA_BOTTOM)
@@ -7092,11 +7472,11 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 					temp2 = read_eeprom(EEP_4TO20MA_UNIT_LO);
 				}								
 				
-				else if((address >= BAC_T1) && (address <= BAC_T8))
-				{
-					temp1 = 0;
-					temp2 = read_eeprom(BAC_TEST1 + address - BAC_T1);
-				}
+//				else if((address >= BAC_T1) && (address <= BAC_T8))
+//				{
+//					temp1 = 0;
+//					temp2 = read_eeprom(BAC_TEST1 + address - BAC_T1);
+//				}
 					
 				else
 					{
@@ -7112,31 +7492,43 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 					}
 					else
 					{
-						uart_sendB[send_cout++] = temp1 ;
-						uart_sendB[send_cout++] = temp2 ;
-						crc16_byte(temp1);
-						crc16_byte(temp2);
+//						#ifdef TSTAT_WIFI
+						uart_sendB[UIP_HEAD + send_cout++] = temp1 ;
+						uart_sendB[UIP_HEAD + send_cout++] = temp2 ;
+//						#else
+//						uart_sendB[send_cout++] = temp1 ;
+//						uart_sendB[send_cout++] = temp2 ;
+//						crc16_byte(temp1);
+//						crc16_byte(temp2);
+//						#endif //TSTAT_WIFI
 					}
 					
 				}
 //			}
+			TransID =  (u16)(*(bufadd) << 8) | (*(bufadd + 1));
+			uart_sendB[0] = TransID >> 8;			//	TransID
+			uart_sendB[1] = TransID;	
+			uart_sendB[2] = 0;			//	ProtoID
+			uart_sendB[3] = 0;
+			uart_sendB[4] = (3 + num * 2) >> 8;	//	Len
+			uart_sendB[5] = (U8_T)(3 + num * 2) ;
 		}
 		
 			
-	else if(*(bufadd+1) == CHECKONLINE)
+		else if(*(bufadd + 1 + headlen) == CHECKONLINE)
 		{
 		if(uartsel == 0)	
 		{
-			uart_send[send_cout++] = *(bufadd) ; //0xff
-			uart_send[send_cout++] = *(bufadd+1) ;	//0x19
+			uart_send[send_cout++] = *(bufadd + headlen) ; //0xff
+			uart_send[send_cout++] = *(bufadd+1 + headlen) ;	//0x19
 		}
 		else
 		{
-			uart_sendB[send_cout++] = *(bufadd) ; //0xff
-			uart_sendB[send_cout++] = *(bufadd+1) ;	//0x19
+			uart_sendB[send_cout++] = *(bufadd + headlen) ; //0xff
+			uart_sendB[send_cout++] = *(bufadd+1 + headlen) ;	//0x19
 		}
-		crc16_byte(*(bufadd));
-		crc16_byte(*(bufadd+1));
+		crc16_byte(*(bufadd + headlen));
+		crc16_byte(*(bufadd+1 + headlen));
 		
 		if(uartsel == 0)	
 			uart_send[send_cout++] = laddress;					//modbus ID
@@ -7170,26 +7562,49 @@ static void responseData(uint8  *bufadd, uint8 uartsel)
 	temp1 = CRChi ;
 	temp2 = CRClo; 
   
- #ifdef TSTAT_ZIGBEE	
-	if(uartsel == 0)
-	{
-		uart_send[send_cout++] = temp1 ;
-		uart_send[send_cout++] = temp2 ;
-		USART_SendDataString(send_cout);
+
+
+	 #ifdef TSTAT_ZIGBEE	
+		if(uartsel == 0)
+		{
+			uart_send[send_cout++] = temp1 ;
+			uart_send[send_cout++] = temp2 ;
+			if(type == BAC_TO_MODBUS)
+				memcpy(&bacnet_to_modbus,&uart_send[3],reg_num*2);
+			else
+				USART_SendDataString(send_cout);			
+		}
+		else
+		{
+			uart_sendB[send_cout++] = temp1 ;
+			uart_sendB[send_cout++] = temp2 ;
+			USART_SendDataStringB(send_cout);
+		}
+		#else
 		
-	}
-	else
-	{
-		uart_sendB[send_cout++] = temp1 ;
-		uart_sendB[send_cout++] = temp2 ;
-		USART_SendDataStringB(send_cout);
-	}
-	#else
-		uart_send[send_cout++] = temp1 ;
-		uart_send[send_cout++] = temp2 ;
-		USART_SendDataString(send_cout);
-	#endif
+		
+			if(type == WIFI)
+			{
+				memcpy(modbus_wifi_buf,uart_sendB,UIP_HEAD + send_cout);
+				modbus_wifi_len = UIP_HEAD + send_cout;		
+			}
+			else
+			{
+				uart_send[send_cout++] = temp1 ;
+				uart_send[send_cout++] = temp2 ;
+				if(type == BAC_TO_MODBUS)
+				{
+					memcpy(&bacnet_to_modbus,&uart_send[3],reg_num*2);
+				}
+				else
+					USART_SendDataString(send_cout);			
+			}
+		#endif
+
 }
+
+
+
 
 
 uint8 checkdata(void)
@@ -7219,8 +7634,7 @@ if(USART_RX_BUFB[1] == CHECKONLINE)
 		{	// in the TRUE case, we add a random delay such that the Interface can pick up the packets
 		//srand();
 		variable_delay = rand() % 10;
-//		ctest1 = variable_delay;	
-//		ctest2++; 
+
 		for (i=0; i<variable_delay; i++)
 			{	
 			if(EEP_Baudrate == 0)	
@@ -7288,8 +7702,7 @@ if(USART_RX_BUFD[1] == CHECKONLINE)
 		{	// in the TRUE case, we add a random delay such that the Interface can pick up the packets
 		//srand();
 		variable_delay = rand() % 10;
-//		ctest1 = variable_delay;	
-//		ctest2++; 
+
 		for (i=0; i<variable_delay; i++)
 			{	
 			if(EEP_Baudrate == 0)	
@@ -7341,12 +7754,11 @@ return true;
 		InitCRC16();
 	
 	// Store any data being written
-		
-		responseData(USART_RX_BUFB, SENDUART1);
-		internalDeal(USART_RX_BUFB);
-
-		
-		
+	//dealdata_flag = 1;
+		responseData(USART_RX_BUFB, SENDUART1,0);
+		USART_ITConfig(USART1, USART_IT_RXNE/*|USART_IT_TC*/, DISABLE);
+		internalDeal1(USART_RX_BUFB,0);
+		USART_ITConfig(USART1, USART_IT_RXNE/*|USART_IT_TC*/, ENABLE);	
 	}	
 
 	// Restart the serial receive.
@@ -7368,9 +7780,9 @@ return true;
 		InitCRC16();
 	
 	// Store any data being written
-		internalDeal(USART_RX_BUFD);
+		internalDeal1(USART_RX_BUFD);  // ????????????
 
-		responseData(USART_RX_BUFD, SENDUART4);
+		responseData(USART_RX_BUFD, SENDUART4,0);
 		
 	}	
 
@@ -7401,6 +7813,197 @@ uint8 checkCrc(void)
 	}
 }
 
+
+
+// type -- 0 , rs485 modbus
+// type -- 4 , ptranster to modbus
+void internalDeal(u8 type,  u8 *pData)
+{
+	internalDeal1(pData,type);
+}
+
+void responseCmd(u8 type, u8* pData)
+{
+  if(type == WIFI)
+	{
+		reg_num = pData[4]*256 + pData[5];
+		responseData(pData,SENDUART4,WIFI);
+		internalDeal(WIFI,pData);
+	}
+	else
+	{  // BAC_TO_MODBUS
+		reg_num = pData[4]*256 + pData[5];
+		responseData(pData,0,BAC_TO_MODBUS);
+	}
+}
+
+
+// add code for wifi
+void write_wifi_data_by_block(uint16 StartAdd,uint8 HeadLen,uint8 *pData,uint8 type) 
+{
+	uint8 far i,j;
+	if(StartAdd == MODBUS_WIFI_SSID_MANUAL_EN)
+	{
+		SSID_Info.MANUEL_EN = pData[HeadLen + 5];
+
+		write_page_en[WIFI_TYPE] = 1; 
+		Flash_Write_Mass();
+		//if(SSID_Info.MANUEL_EN != 0)
+//		{
+////			Restore_WIFI();
+//			if(type == WIFI)
+//			{// response first, then reboot
+//				//delay_ms(1000);
+//				flag_connect_AP = 1;				
+//				Test[10]++;
+//			}
+//			else
+//			{Test[11]++;
+				SoftReset();					
+//			}			
+//		}
+	}
+	else if(StartAdd == MODBUS_WIFI_RESTORE)
+	{
+		if(pData[HeadLen + 5] == 1)
+			Restore_WIFI();
+	}
+	else if(StartAdd == MODBUS_WIFI_MODE)
+	{
+		SSID_Info.IP_Auto_Manual = pData[HeadLen + 5];
+//		write_eeprom(WIFI_IP_AM,pData[HeadLen + 5]);			
+	}
+	else if(StartAdd == MODBUS_WIFI_BACNET_PORT)
+	{
+		SSID_Info.bacnet_port = pData[HeadLen + 5]+ (pData[HeadLen + 4]<<8);
+	}
+	else if(StartAdd == MODBUS_WIFI_MODBUS_PORT)
+	{
+		SSID_Info.modbus_port = pData[HeadLen + 5]+ (pData[HeadLen + 4]<<8);
+//		write_eeprom(WIFI_MODBUS_PORT,SSID_Info.modbus_port);	
+//		write_eeprom(WIFI_MODBUS_PORT + 1,SSID_Info.modbus_port >> 8);	
+	}
+	else if(StartAdd == MODBUS_WIIF_START_SMART)
+	{
+		// write 1, start smart cofigure
+		if(pData[HeadLen + 5] == 1)
+			Start_Smart_Config();
+		else
+			Stop_Smart_Config();
+	}
+	else if(StartAdd >= MODBUS_WIFI_SSID_START && StartAdd <= MODBUS_WIFI_SSID_END)
+	{
+		if((StartAdd - MODBUS_WIFI_SSID_START) % 32 == 0)
+		{
+			char i;
+			memset(&SSID_Info.name,'\0',64);
+			memcpy(&SSID_Info.name,&pData[HeadLen + 7],64);
+		}
+	}
+	else if(StartAdd >= MODBUS_WIFI_PASS_START && StartAdd <= MODBUS_WIFI_PASS_END)
+	{
+		if((StartAdd - MODBUS_WIFI_PASS_START) % 16 == 0)
+		{
+			char i;
+			memset(&SSID_Info.password,'\0',32);
+			memcpy(&SSID_Info.password,&pData[HeadLen + 7],32);
+		}
+	}
+	else if(StartAdd == MODBUS_WIFI_IP1) 
+	{
+		if((StartAdd - MODBUS_WIFI_IP1) % 12 == 0)
+		{
+			SSID_Info.ip_addr[0] = pData[HeadLen + 8];
+			SSID_Info.ip_addr[1] = pData[HeadLen + 10];
+			SSID_Info.ip_addr[2] = pData[HeadLen + 12];
+			SSID_Info.ip_addr[3] = pData[HeadLen + 14];
+					
+			SSID_Info.net_mask[0] = pData[HeadLen + 16];
+			SSID_Info.net_mask[1] = pData[HeadLen + 18];
+			SSID_Info.net_mask[2] = pData[HeadLen + 20];
+			SSID_Info.net_mask[3] = pData[HeadLen + 22];
+			
+			SSID_Info.getway[0] = pData[HeadLen + 24];
+			SSID_Info.getway[1] = pData[HeadLen + 26];
+			SSID_Info.getway[2] = pData[HeadLen + 28];
+			SSID_Info.getway[3] = pData[HeadLen + 30];
+			
+			
+		}
+	}
+}
+
+
+
+uint16 read_wifi_data_by_block(uint16 addr) 
+{
+	uint8 item;	
+	uint16 *block;			
+	uint8 *block1;
+	if(addr == MODBUS_WIFI_SSID_MANUAL_EN)
+	{
+		return SSID_Info.MANUEL_EN;		
+	}
+	else if(addr == MODBUS_WIFI_MODE)
+	{
+		return SSID_Info.IP_Auto_Manual;
+	}
+	else if(addr == MODBUS_WIFI_STATUS)
+	{
+		return SSID_Info.IP_Wifi_Status;
+	}
+	else if(addr == MODBUS_WIFI_MODBUS_PORT)
+	{
+		return SSID_Info.modbus_port;
+	}
+	else if(addr == MODBUS_WIFI_BACNET_PORT)
+	{
+		return SSID_Info.bacnet_port;
+	}
+	else if(addr == MODBUS_WIFI_REV)
+	{
+		return SSID_Info.rev;
+	}
+	else if(addr >= MODBUS_WIFI_SSID_START && addr <= MODBUS_WIFI_SSID_END)
+	{
+		block = (U16_T *)&SSID_Info.name;
+		item = (addr - MODBUS_WIFI_SSID_START) % 32;  // size is 64
+		return block[item];
+	}
+	else if(addr >= MODBUS_WIFI_PASS_START && addr <= MODBUS_WIFI_PASS_END)
+	{
+		block = (U16_T *)&SSID_Info.password;
+		item = (addr - MODBUS_WIFI_PASS_START) % 16;  // size is 32
+		return block[item];
+	}				
+	else if((addr >= MODBUS_WIFI_IP1) && (addr <= MODBUS_WIFI_IP1 + 3))
+	{
+		block1 = (U8_T *)&SSID_Info.ip_addr;
+		item = (addr - MODBUS_WIFI_IP1) % 4; 
+		return block1[item];		
+	}
+	else if((addr >= MODBUS_WIFI_NETMASK) && (addr <= MODBUS_WIFI_NETMASK + 3))
+	{
+		block1 = (U8_T *)&SSID_Info.net_mask;
+		item = (addr - MODBUS_WIFI_NETMASK) % 4; 
+		return block1[item];
+	}
+	else if((addr >= MODBUS_WIFI_GETWAY) && (addr <= MODBUS_WIFI_GETWAY + 3))
+	{
+		block1 = (U8_T *)&SSID_Info.getway;
+		item = (addr - MODBUS_WIFI_GETWAY) % 4;
+		return block1[item];
+	}
+	else if((addr >= MDOBUS_WIFI_MACADDR) && (addr <= MDOBUS_WIFI_MACADDR + 5))
+	{
+		block1 = (U8_T *)&SSID_Info.mac_addr;
+		item = (addr - MDOBUS_WIFI_MACADDR) % 4;  
+		return block1[item];
+	}
+	else		
+		return 0;
+	
+}
 
 #ifdef TSTAT_ZIGBEE
 uint8 checkCrcB(void)

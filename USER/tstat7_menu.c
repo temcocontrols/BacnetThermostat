@@ -54,11 +54,18 @@ unsigned char const  FANMODE[5][9]  =
 	"MAN HI  ", 
 	" -AUTO- ",
 };
+//unsigned char const  HEATCOOL[3][9] =
+//{
+//	"MAN HEAT",
+//	"MAN COOL", 
+//	"AUTO H/C", 
+//}; 
+
 unsigned char const  HEATCOOL[3][9] =
 {
-	"MAN HEAT",
-	"MAN COOL", 
-	"AUTO H/C", 
+	"AUTO H/C",
+	"MAN COOL",
+	"MAN HEAT" 
 }; 
 
 enum
@@ -1430,21 +1437,25 @@ static void accept_parameter( )
 				case HEATCOOLE:
 				 		if(gsiPara == 0)
 						{				 
-							heat_cool_flag = 1 ;
-							b.eeprom[EEP_HEAT_COOL_CONFIG] = HC_KEYPAD;
+							
+							b.eeprom[EEP_HEAT_COOL_CONFIG] = HC_AUTOMATIC;// HC_CFG_AUTO;//HC_KEYPAD;
 						}
 						else if(gsiPara == 1)
 						{
 								heat_cool_flag = 0 ;
-								b.eeprom[EEP_HEAT_COOL_CONFIG] = HC_KEYPAD;
+								b.eeprom[EEP_HEAT_COOL_CONFIG] = HC_KEYPAD;//HC_KEYPAD;
 						}
 						else
 						{
-								b.eeprom[EEP_HEAT_COOL_CONFIG] = HC_AUTOMATIC;
+							  heat_cool_flag = 1 ;
+								b.eeprom[EEP_HEAT_COOL_CONFIG] = HC_KEYPAD;//HC_AUTOMATIC;
 				
 						}
+						heat_cool_user = gsiPara;
+						
 						new_write_eeprom(EEP_HEAT_COOL_CONFIG, b.eeprom[EEP_HEAT_COOL_CONFIG]);
-				
+						new_write_eeprom(EEP_HC_USER, heat_cool_user);
+											
 						control_logic() ;
 //						StatusLeds();
 						break;
@@ -2217,15 +2228,13 @@ static void decrease_parameter( )
 					else if( gsiPara > 0)
 				 	{	
 		 				 gsiPara-- ;
-						if( gsiPara == 0)
-						 gsiPara = 4;
+//						if( gsiPara == 0)
+//						 gsiPara = 4;
 					}
 					else
 					{
 						gsiPara = 4;
 					}
-
-
 
 					if((b.eeprom[ EEP_FAN_MODE ] < 2 || b.eeprom[ EEP_AUTO_ONLY ] == 1) && gsiPara <= AUTO)
 					{				 
@@ -2239,7 +2248,7 @@ static void decrease_parameter( )
 					else
 					{					 
 						putText(1,(uint8 *)FANMODE[gsiPara]);
-				    }				 
+				  }				 
 								
 				break; 
 				default:
@@ -2570,7 +2579,7 @@ static void switch_mode( void )
 	}
 	else
 	{
-		gsiPara =  0;//new_read_eeprom(COOLHEATMODE);//0;//b.eeprom[EEP_FAN_SPEED - MAXEEPCONSTRANGE];
+		gsiPara =  heat_cool_user;//new_read_eeprom(COOLHEATMODE);//0;//b.eeprom[EEP_FAN_SPEED - MAXEEPCONSTRANGE];
 		if(gsiPara > 2)
 		gsiPara = 2;
 		putText(1,(uint8 *)HEATCOOL[gsiPara]);
@@ -2634,7 +2643,7 @@ gbModeMenu = 0;
 				gbClock  = 0;
 				gbAdvancedMenu  = 1;
 				gbScheduleMenu = 0;
-gbModeMenu = 0;
+				gbModeMenu = 0;
 				gbClockMenu = 0;
 				gucItemScheduleMenu  = 0;
 				gucItemClockMenu = 0;
@@ -2672,7 +2681,7 @@ static void Icon_Control(void)
 		DisplayFanSpeedIcon(setpoint_select);
 		DisplayHeat_CoolIcon(mode_state);
 	}
-	else
+	else if(ICON_ManualMode == 1) //icons control in manual mode
 	{
 		if(GetByteBit(&ICON_ManualValue,1))//cool icon on
 			DisplayIcon(DT2,ON);	
@@ -2734,6 +2743,102 @@ static void Icon_Control(void)
 			
 	}
 	 
+
+	else if(ICON_ManualMode == 2)//icons are relative with outputs
+	{
+//		if((IconOutputControl(0) + IconOutputControl(1) + IconOutputControl(2) + IconOutputControl(3))>0)
+//		{
+		//--------------day/night sun/moon icons----------------
+//			if((icon_flag[0] == 1)&&(icon_flag[1] != 1))
+//				DisplayIcon(DT3,ON);// sun icon ON //disp_icon(ICON_XDOTS, ICON_YDOTS, sunicon, 		FIRST_ICON_POS,	ICON_POS,TSTAT8_CH_COLOR, TSTAT8_BACK_COLOR);
+//			else if((icon_flag[1] == 1)&&(icon_flag[0] != 1))
+//				disp_icon(ICON_XDOTS, ICON_YDOTS, moonicon, 		FIRST_ICON_POS,	ICON_POS,TSTAT8_CH_COLOR, TSTAT8_BACK_COLOR);
+//			else
+//				disp_null_icon(ICON_XDOTS, ICON_YDOTS, 0, FIRST_ICON_POS ,ICON_POS,TSTAT8_BACK_COLOR, TSTAT8_BACK_COLOR);
+				if(icon_flag[0] == 1) // sun icon is ON
+					DisplayIcon(DT3,ON);
+				else 
+					DisplayIcon(DT3,OFF);
+				if(icon_flag[1] == 1) // sun icon is ON
+					DisplayIcon(DT4,ON);
+				else 
+					DisplayIcon(DT4,OFF);
+		//--------------occ and unocc icon----------------
+//				if(icon_flag[2] == 1) // sun icon is ON
+//					DisplayIcon(DT3,ON);
+//				else 
+//					DisplayIcon(DT3,OFF);
+//				if(icon_flag[3] == 1) // sun icon is ON
+//					DisplayIcon(DT4,ON);
+//				else 
+//					DisplayIcon(DT4,OFF);
+				
+			if((icon_flag[2] == 1)&&(icon_flag[3] != 1))//occupied icon is ON
+			{
+				DisplayIcon(DT6,ON);//	
+				DisplayIcon(DT5,ON);////disp_icon(ICON_XDOTS, ICON_YDOTS, athome, 		SECOND_ICON_POS,	ICON_POS,TSTAT8_CH_COLOR, TSTAT8_BACK_COLOR);
+			}
+			else if((icon_flag[3] == 1)&&(icon_flag[2] != 1))//unoccupied mode is OFF
+			{
+				DisplayIcon(DT7,ON);//	
+				DisplayIcon(DT5,ON);//	
+			}
+			//	disp_icon(ICON_XDOTS, ICON_YDOTS, offhome, 		SECOND_ICON_POS,	ICON_POS,TSTAT8_CH_COLOR, TSTAT8_BACK_COLOR);
+			else
+			{
+				DisplayIcon(DT5,OFF);//	
+				DisplayIcon(DT6,OFF);//
+				DisplayIcon(DT7,OFF);//
+			}
+				//disp_null_icon(ICON_XDOTS, ICON_YDOTS, 0, SECOND_ICON_POS ,ICON_POS,TSTAT8_BACK_COLOR, TSTAT8_BACK_COLOR);		
+//		}
+		//-------------------------------------------heat/cool icons--------------------------------------
+				if(icon_flag[4] == 1) // heat icon is ON
+					DisplayIcon(DT8,ON);
+				else 
+					DisplayIcon(DT8,OFF);
+				if(icon_flag[5] == 1) // cool icon is ON
+					DisplayIcon(DT2,ON);
+				else 
+					DisplayIcon(DT2,OFF);				
+				
+//		if((IconOutputControl(4) + IconOutputControl(5)>0))  //heat & cool icon
+//		{
+//			if((icon_flag[4] == 1)&&(icon_flag[5] != 1))
+//				disp_icon(ICON_XDOTS, ICON_YDOTS, heaticon, 		THIRD_ICON_POS,	ICON_POS,TSTAT8_CH_COLOR, TSTAT8_BACK_COLOR);
+//			else if((icon_flag[5] == 1)&&(icon_flag[4] != 1))
+//				disp_icon(ICON_XDOTS, ICON_YDOTS, coolicon, 		THIRD_ICON_POS,	ICON_POS,TSTAT8_CH_COLOR, TSTAT8_BACK_COLOR);
+//			else
+//			{
+//				if(((icon_flag[4] == 1)&&(icon_flag[5] == 1)) || ((icon_flag[4] == 0)&&(icon_flag[5] == 0)))
+//					disp_null_icon(ICON_XDOTS, ICON_YDOTS, 0, THIRD_ICON_POS ,ICON_POS,TSTAT8_BACK_COLOR, TSTAT8_BACK_COLOR);
+//				if((icon_flag[4] == 100) || (icon_flag[5] == 100))
+//					goto NORMAL_ICON;
+//			}
+//		}
+   //-------------------------------------------fan speed icons--------------------------------------
+				if(icon_flag[6] == 1) // fan1 icon is ON
+					DisplayIcon(DT11,ON);
+				else 
+					DisplayIcon(DT11,OFF);
+				if(icon_flag[7] == 1) // fan2 icon is ON
+					DisplayIcon(DT12,ON);
+				else 
+					DisplayIcon(DT12,OFF);		
+//		if(IconOutputControl(6)+IconOutputControl(7)+IconOutputControl(8) != 0)//fan speed icons tangle with outputs
+//			{
+//				if((icon_flag[6] == 1)&&(icon_flag[7] != 1)&&(icon_flag[8] != 1))
+//					disp_icon(FANSPEED_XDOTS, FANSPEED_YDOTS, fanspeed1a, FIFTH_ICON_POS,ICON_POS,TSTAT8_CH_COLOR, TSTAT8_BACK_COLOR);
+//				else if((icon_flag[7] == 1)&&(icon_flag[6] != 1)&&(icon_flag[8] != 1))
+//					disp_icon(FANSPEED_XDOTS, FANSPEED_YDOTS, fanspeed2a, FIFTH_ICON_POS,ICON_POS,TSTAT8_CH_COLOR, TSTAT8_BACK_COLOR);
+//				else if((icon_flag[8] == 1)&&(icon_flag[6] != 1)&&(icon_flag[7] != 1))
+//					disp_icon(FANSPEED_XDOTS, FANSPEED_YDOTS, fanspeed3a, FIFTH_ICON_POS,ICON_POS,TSTAT8_CH_COLOR, TSTAT8_BACK_COLOR);
+//				else
+//					disp_icon(FANSPEED_XDOTS, FANSPEED_YDOTS, fanspeed0a, FIFTH_ICON_POS,ICON_POS,TSTAT8_CH_COLOR, TSTAT8_BACK_COLOR);				
+//			}
+		
+	}		
+
 }
 
 static void show_temprature(void)
@@ -2961,6 +3066,7 @@ void vTstat7_Menu( void *pvParameters )
 	start_normal_mode(); 
 	Tstat7_ClearScreen();
 	delay_ms(100);
+
 	DisplayVer(); 	
 	for(;;)
 	{   
@@ -2996,12 +3102,7 @@ void vTstat7_Menu( void *pvParameters )
 		if(gucFanCounter>4 )
 			gucFanCounter = 0;
 	 
-//		if( current_mode_of_operation[0] == DAYTIME_COASTING )
-//		{
-//			gucFanCounter = 8;
-//			NoFanIcon();
-//		 
-//		}
+
 		
 		if(ICON_ManualMode == 0)
 		{
@@ -3019,8 +3120,18 @@ void vTstat7_Menu( void *pvParameters )
 				default:
 				break;
 			}
+		if( current_mode_of_operation[0] == DAYTIME_COASTING )
+		{
+			gucFanCounter = 8;
+			NoFanIcon();
+		}			
+			
 		}
-		delay_ms(100);
+		
+		for(i=0;i<9;i++)
+			icon_control_output(i);
+		
+		delay_ms(200);
 		
 //		i++;
 // 	    if(i==10) 

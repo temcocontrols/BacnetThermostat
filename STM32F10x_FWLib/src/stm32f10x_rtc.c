@@ -216,7 +216,7 @@ void RTC_WaitForLastTask(void)
 		delay_ms(100);
 		if(i>30)
 		{
-			update_flag = 3;
+//			update_flag = 3;
 			return;
 			
 		}
@@ -243,7 +243,7 @@ void RTC_WaitForSynchro(void)
 		delay_ms(100);
 		if(i>30)
 		{
-			update_flag = 3;
+//			update_flag = 3;
 			return;
 			
 		}
