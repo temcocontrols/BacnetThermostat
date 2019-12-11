@@ -13,6 +13,13 @@
 #ifdef TSTAT7_ARM
 #define ICON_ROW  	26
 static uint8 icon_data[ICON_ROW];
+extern void watchdog(void);
+const unsigned char tab2[]={
+ 0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,
+
+ };
+
+
 
 char const ALLData[128][8] = 
 {
@@ -165,11 +172,29 @@ uint16 const ArrayData[10][22] =
 
 
  
+//---------------------------------------
+/*********************ST7565 driver*******************/
+ 
+/**************************???*************************/ 
+//=========================LCD??????====================== 
+//sbit LCDA0=P2^5;  //????
+//sbit LCDSK=P2^6;  //????
+//sbit LCDSI=P2^7;  //????
+//sbit LCDRS=P2^4;  //????
+//=========================????============================= 
+void LCDInit();        //????? 
+void LCDWriteByte(char dat,char command);  //??????,????/????(0??,1??) 
+void LCDShiftWrite(char dat);  //??????? 
+void LCDSetXY(char x, char y); //?????? 
 
 
-
-
-
+#define LCD_col   128 //128?
+#define LCD_plat  64 //64?
+#define TX_col   16 //16????
+#define ZF_col    21    //21????
+#define PAGE_NUM  8     //???
+#define Page0    0xb0  //page 0 address
+#define Display_Sta_line  0x40 // display ram H0 address
 
 /*****************************************
 FUNCTION NAME:I2CStart
@@ -363,6 +388,7 @@ void putText(unsigned char Part,unsigned char *pStr)
 	unsigned char  i,j;
 	unsigned char  Loop;
 	unsigned char  Data[8][8];
+	uint8 reverse_buf[5][8];//for ST7565
 
 	for( i = 0; i < 8; i++ )
 	{
@@ -391,27 +417,66 @@ void putText(unsigned char Part,unsigned char *pStr)
 	for( i = 0; i < 8; i++ )
 	{Data[4][i] = (Data[6][i] >> 2) | (Data[7][i] << 3);}
 
-	for( Loop = 0; Loop < 5; Loop++ )
-	{	
-		I2CStart();
-		I2CSendByte( 0x78 );//chip address	
-		I2CSendByte( 0x00 );
-		I2CSendByte( 0x30 );
-		I2CSendByte( 0x40 + Loop );
-		if( Part == 0 )	
-			I2CSendByte( 0x88 );
-		else
-			I2CSendByte( 0x80 );
-		I2CStop();
+	if(HardwareVersion <= 21)
+	{
+		for( Loop = 0; Loop < 5; Loop++ )
+		{	
+			I2CStart();
+			I2CSendByte( 0x78 );//chip address	
+			I2CSendByte( 0x00 );
+			I2CSendByte( 0x30 );
+			I2CSendByte( 0x40 + Loop );
+			if( Part == 0 )	
+				I2CSendByte( 0x88 );
+			else
+				I2CSendByte( 0x80 );
+			I2CStop();
 
-		I2CStart();	
-		I2CSendByte( 0x78 );//chip address	
-		I2CSendByte( 0x40 );
-		for(i = 0;i < j;i++)
-		{
-			I2CSendByte( Data[Loop][i] );	
+			I2CStart();	
+			I2CSendByte( 0x78 );//chip address	
+			I2CSendByte( 0x40 );
+			for(i = 0;i < j;i++)
+			{
+				I2CSendByte( Data[Loop][i] );	
+			}
+			I2CStop();
 		}
-		I2CStop();
+	}
+	else//if hardware version is > 21, ST7565 chip
+	{
+		for( Loop = 0; Loop <5; Loop++ )
+		{
+			for(j=0;j<8;j++)
+			{
+				for(i=0;i<8;i++)
+				{
+					if(GetByteBit(&Data[Loop][j],i))
+						SetByteBit(&reverse_buf[4-Loop][j],7-i,1);
+					else
+						SetByteBit(&reverse_buf[4-Loop][j],7-i,0);
+				}
+			}
+		}	
+		for( Loop = 0; Loop <5; Loop++ )
+		{	
+			 if( Part == 0 )
+			 {
+			 LCD_WRITE_CMD(0xb1+Loop);
+			 LCD_WRITE_CMD(0x17);//diaplay colum high 4 bits
+			 LCD_WRITE_CMD(0x04);//diaplay colum low 4 bit 
+			 }
+			else
+			{
+			 LCD_WRITE_CMD(0xb1+Loop);
+			 LCD_WRITE_CMD(0x17);//diaplay colum high 4 bits
+			 LCD_WRITE_CMD(0x0c);//diaplay colum low 4 bit 
+			}			
+
+			for(i = 8;i > 0;i--)
+			{
+				LCD_WRITE_DAT(reverse_buf[Loop][i-1] );			
+			}
+		}	
 	}
 }
 
@@ -614,8 +679,10 @@ void Tstat7_InitScreen( void )
 	WriteCommand( 0x29 );//1/3bias,4 commons
 	WriteCommand( 0xe3 );//Normal mode
  
-
+  
 //NT7533
+	if(HardwareVersion <= 21)
+	{
 	I2CStart();	
 	I2CSendByte( 0x78 );//chip address
 	I2CSendByte( 0x00 );
@@ -631,6 +698,31 @@ void Tstat7_InitScreen( void )
 	I2CSendByte( 0x30 );//Function Set Use basic instruction set
 	I2CSendByte( 0x0c );//Display Control Normal Display
 	I2CStop();
+	}
+	else
+	{
+	 LCDInit();
+
+	 clrscr();	
+	}
+}
+
+void Tstat7_InitScreen_HT1621( void )
+{
+	Tstat7_lcd_gpio_Init_REV22();
+	
+	delay_us( 100 );
+	RST = 0;
+	delay_us( 100 );
+	RST = 1;
+	delay_us( 100 );
+
+//HT1621
+	WriteCommand( 0x01 );//Turn on system oscillator
+	WriteCommand( 0x03 );//Turn on LCD outputs
+	WriteCommand( 0x18 );//System on-chip RC oscillator,RC 256K
+	WriteCommand( 0x29 );//1/3bias,4 commons
+	WriteCommand( 0xe3 );//Normal mode
 }
 
 
@@ -758,8 +850,6 @@ if(schedule_on_off == 1)
 					DisplayIcon(DT6,ON); //show human
 					DisplayIcon(DT3,OFF); //show sunshine
 				}
-//			disp_null_icon(45, 45, 0, ICON_XPOS ,ICON_POS,TSTAT8_BACK_COLOR, TSTAT8_BACK_COLOR);
-//			disp_null_icon(45, 45, 0, ICON_XPOS+60 ,ICON_POS,TSTAT8_BACK_COLOR, TSTAT8_BACK_COLOR);
 			}
 		}		
 	
@@ -1080,7 +1170,26 @@ void Tstat7_lcd_gpio_Init(void)
 	GPIO_SetBits(GPIOD, GPIO_Pin_0|GPIO_Pin_2|GPIO_Pin_3|GPIO_Pin_15);
 }
 	 
- 
+void Tstat7_lcd_gpio_Init_REV22(void)
+{
+	GPIO_InitTypeDef GPIO_InitStructure;
+	
+//	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE); 
+//	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_2 | GPIO_Pin_3 | GPIO_Pin_11;
+//	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+// 	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+//	GPIO_Init(GPIOA, &GPIO_InitStructure);
+//	GPIO_SetBits(GPIOA, GPIO_Pin_2|GPIO_Pin_3|GPIO_Pin_11);
+
+	
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOD, ENABLE); 
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_1|GPIO_Pin_4|GPIO_Pin_5|GPIO_Pin_6|GPIO_Pin_15;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+ 	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_Init(GPIOD, &GPIO_InitStructure);
+	GPIO_SetBits(GPIOD, GPIO_Pin_4|GPIO_Pin_5|GPIO_Pin_15);
+	GPIO_ResetBits(GPIOD, GPIO_Pin_1|GPIO_Pin_6);
+} 
 
 
 
@@ -1117,6 +1226,235 @@ void Digital_Test(short int pos,unsigned char data)
 		DispalyDigital( ArrayData[pos][data*2+1] );
 	}
 }
+
+
+
+
+ void LCD_WriteLByte(u8 B)//?PC???8?,?8???
+ {
+   u16 Data_PAL;
+   Data_PAL = GPIO_ReadOutputData(GPIOD);
+   Data_PAL = Data_PAL&0xFF00;//???8???
+   Data_PAL = Data_PAL | B;//???8???
+   GPIO_Write(GPIOD,Data_PAL );
+ }
+ 
+ void clrscr(void)//??
+ {
+   u8 i,page;
+   for(page=0xb0;page<0xb8;page++)
+   {
+     LCD_WRITE_CMD(page);
+     LCD_WRITE_CMD(0x17);//???,????????,??0???
+     LCD_WRITE_CMD(0x04);//???,??0???
+     for(i=0;i<16;i++)
+     {LCD_WRITE_DAT(0);}
+   }
+ }
+
+ 
+
+//***************************????******************************* 
+void WRITE_STRING86(uint8 plat,uint8 column,uint8 *p)
+{
+ uint8 page,col,col_h,col_l;
+ uint8 i;
+ 
+ page=plat+Page0;
+ col=column*6;
+ col_h=((col>>4)|0xf0)&0x1f;
+ col_l=col&0x0f;
+ LCD_WRITE_CMD(0);
+ LCD_WRITE_CMD(0);
+ LCD_WRITE_CMD(page);
+ 
+
+ LCD_WRITE_DAT(0x55);
+
+
+}
+//========================?????????================================= 
+void LCDInit() 
+{ 
+	 LCDCS = 0; 
+	 LCDRS=0;       //LCD ????(L) 
+	 delay_ms(100); // ??100ms , Datasheet ??????1us
+	 LCDRS = 1;    //LCD ????(H)                                     
+
+	 delay_ms(100); //????
+
+	 LCD_WRITE_CMD(0xe2);//软件复位
+	 LCD_WRITE_CMD(0xaf);//显示开
+	 LCD_WRITE_CMD(0x40);//显示RAM行地址  0x40为第0行
+	 LCD_WRITE_CMD(0xa0);//LCD正向显示
+	 LCD_WRITE_CMD(0xa6);//正常显示
+	 LCD_WRITE_CMD(0xa5);//display all off
+	 LCD_WRITE_CMD(0xa2);//偏压比设定
+	 LCD_WRITE_CMD(0xc8);//0xc8第一行在屏幕上方
+	 LCD_WRITE_CMD(0x2f);//开关内部电源
+	 LCD_WRITE_CMD(0x24);//对比度设置
+	 LCD_WRITE_CMD(0x81);//进入细调设命令
+	 LCD_WRITE_CMD(0x24);
+	 
+	 delay_ms(1000);
+	 LCD_WRITE_CMD(0xa4);//display all oN
+      
+} 
+
+//========================?????(???????)============================= 
+void LCDWriteByte(char dat,char command) 
+{   
+//                 LCDCS = 0;                         //CS=0.?:??????CS,???????.   
+	 if(command == 0)       
+	 {   
+		 LCDA0 = 0;                           //A0=0,????   
+		 LCDShiftWrite(dat);   
+	 }   
+	 else                  
+	 {   
+		 LCDA0 = 1;                          //A0=1,????   
+		 LCDShiftWrite(dat);     
+	 }   
+//        LCDCS = 1;                                 //CS=1.?:??????CS,???????. 
+} 
+
+
+void LCD_WRITE_CMD(uint8 dat)
+{
+		LCDA0 = 0;                           //A0=0,????   
+    LCDShiftWrite(dat);   
+}
+
+void LCD_WRITE_DAT(uint8 dat)
+{
+		LCDA0 = 1;                           //A0=0,????   
+    LCDShiftWrite(dat);   
+}
+//===========================??(??)??????================================ 
+void LCDShiftWrite(char dat)   
+{    
+     unsigned char i;                                      //?????? 
+     unsigned char Series,Temp;                           //?????? 
+       
+     LCDSK = 0;                                           //SCL=0   
+     Series = dat;   
+     for(i=0; i<8; i++)   
+     {   
+			 LCDSK = 0;                              //SCL=0   
+			 Temp=Series & 0x80;                    //???7?   
+			 if(Temp)                               //??Temp=1,??SI=1.??Temp+0,??SI=0 
+			 {   
+							 LCDSI = 1;                    //SI=1   
+			 }   
+			 else    
+			 {   
+							 LCDSI = 0;                   //SI=0   
+			 } 
+			 LCDSK = 1;                          //SCL=1????      
+			 Series = Series << 1;               //??1?    
+     }   
+} 
+
+/********************************end of ST7565 driver******************************/
+void putTextST7565(unsigned char Part,unsigned char *pStr)
+{
+	unsigned char  i,j;
+	unsigned char  Loop;
+	unsigned char  Data[8][8];
+
+	uint8 reverse_buf[5][8];//for ST7565
+
+	for( i = 0; i < 8; i++ )
+	{
+		for( j = 0; j < 8; j++ )
+		{
+			Data[i][j] = ALLData[*(pStr+i)][j];
+		}
+	}	 
+	i = 0;
+	j = 8;
+
+	for( i = 0; i < 8; i++ )
+	{Data[0][i] = Data[0][i] | (Data[1][i] << 5);}
+	
+	for( i = 0; i < 8; i++ )
+	{Data[1][i] = (Data[1][i] >> 3) | (Data[2][i] << 2) | (Data[3][i] << 7);}
+
+	for( i = 0; i < 8; i++ )
+	{Data[2][i] = (Data[3][i] >> 1) | (Data[4][i] << 4);}
+
+	for( i = 0; i < 8; i++ )
+	{Data[3][i] = (Data[4][i] >> 4) | (Data[5][i] << 1) | (Data[6][i] << 6);}
+
+	for( i = 0; i < 8; i++ )
+	{Data[4][i] = (Data[6][i] >> 2) | (Data[7][i] << 3);}
+	
+
+	for( Loop = 0; Loop <5; Loop++ )
+	{
+		for(j=0;j<8;j++)
+		{
+			for(i=0;i<8;i++)
+			{
+				if(GetByteBit(&Data[Loop][j],i))
+					SetByteBit(&reverse_buf[4-Loop][j],7-i,1);
+				else
+					SetByteBit(&reverse_buf[4-Loop][j],7-i,0);
+			}
+		}
+	}		
+	
+
+	for( Loop = 0; Loop <5; Loop++ )
+	{	
+//		I2CStart();
+//		I2CSendByte( 0x78 );//chip address	
+//		I2CSendByte( 0x00 );
+//		I2CSendByte( 0x30 );
+//		I2CSendByte( 0x40 + Loop );
+//		if( Part == 0 )	
+//			I2CSendByte( 0x88 );
+//		else
+//			I2CSendByte( 0x80 );
+//		I2CStop();
+
+//		I2CStart();	
+//		I2CSendByte( 0x78 );//chip address	
+//		I2CSendByte( 0x40 );
+  	 if( Part == 0 )
+		 {
+		 LCD_WRITE_CMD(0xb1+Loop);
+		 LCD_WRITE_CMD(0x17);//diaplay colum high 4 bits
+		 LCD_WRITE_CMD(0x04);//diaplay colum low 4 bit 
+		 }
+		else
+		{
+		 LCD_WRITE_CMD(0xb1+Loop);
+		 LCD_WRITE_CMD(0x17);//diaplay colum high 4 bits
+		 LCD_WRITE_CMD(0x0c);//diaplay colum low 4 bit 
+		}			
+
+		for(i = 8;i > 0;i--)
+		{
+      LCD_WRITE_DAT(reverse_buf[Loop][i-1] );			
+		}
+	}
+}
+
+void Newlcdtest(void) 
+{                          
+ u8 i,page;
+
+	 LCDInit();
+
+	clrscr();
+
+	putText(0,(uint8 *)"TEMPAUTO"); 
+	putText(1,(uint8 *)"12345678"); 
+} 
+
+
+
 
 
 #endif

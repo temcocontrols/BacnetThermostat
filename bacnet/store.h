@@ -26,7 +26,8 @@
 #define OUT_PAGE_FLAG					0x0803e800//0x807d000
 #define IN_PAGE_FLAG 					0x0803f000//0x807e000	
 #define AV_PAGE_FLAG 					0x0803f800//0x807f000  //FLASH_APP1_ADDR + 254*STM_SECTOR_SIZE
- 
+#define WIFI_PAGE_FLAG				0X08048000
+
 
 //#define INFO_PAGE	(OUT_PAGE_FLAG+2)	
 #define OUT_PAGE	(OUT_PAGE_FLAG+2)	
@@ -35,6 +36,7 @@
 
 #define WR_PAGE   (WR_PAGE_FLAG + 2)
 #define AR_PAGE   (AR_PAGE_FLAG + 2)
+#define WIFI_PAGE  (WIFI_PAGE_FLAG + 2)
 
 enum{
 	OUT_TYPE,
@@ -42,6 +44,7 @@ enum{
 	VAR_TYPE,
 	WR_TYPE,
 	AR_TYPE,
+	WIFI_TYPE,
 	MAX_TYPE,
 };
 #pragma pack(push)
@@ -79,7 +82,7 @@ typedef struct
 	int8_t digital_analog;  /* (1 bit; 0=digital, 1=analog)*/
 	int8_t switch_status/*access_level*/;  /* (3 bits; 0-5)*/
 	int8_t control ;  /* (1 bit; 0=off, 1=on)*/
-	int8_t read_remote;//digital_control;  /* (1 bit)*/
+	int8_t out_of_service;//digital_control;  /* (1 bit)*/
 	int8_t decom;  /* (1 bit; 0=ok, 1=point decommissioned)*/
 	int8_t range;	/* (1 uint8_t ; output_range_equate)*/
 
@@ -107,7 +110,7 @@ typedef struct
 	int8_t decom;/* (1 bit; 0=ok, 1=point decommissioned)*/  // high 4 bits input type, low 4 bits for old decom status
 	uint8_t sub_id;//int8_t sen_on;/* (1 bit)*/
 	uint8_t sub_product;//int8_t sen_off;  /* (1 bit)*/
-	int8_t control; /*  (1 bit; 0=OFF, 1=ON)*/
+	int8_t control; /* (1 bit; 0=OFF, 1=ON)*/
 	int8_t auto_manual; /* (1 bit; 0=auto, 1=manual)*/
 	int8_t digital_analog ; /* (1 bit; 1=analog, 0=digital)*/
 	int8_t calibration_sign; /* (1 bit; sign 0=positiv 1=negative )*/

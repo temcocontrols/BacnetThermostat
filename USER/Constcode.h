@@ -5,6 +5,10 @@
 //extern uint8 const poll_co2_cmd[3][8];
 extern unsigned int short const baudrate[9];
 extern uint8 const poll_co2_cmd[9];
+extern uint8 const  disable_co2_autocal_MHZ19B[9];
+extern uint8 const  enable_co2_autocal_MHZ19B[9];
+extern uint8 const cal_co2_MHZ19B_zero[9];
+
 extern  DISPTEMP const code ion[4];
 
 extern  DISPTEMP const code clock_week[7];

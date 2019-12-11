@@ -2,6 +2,7 @@
 #include "store.h"
 #include "bacnet.h"
 #include "stmflash.h"
+#include "bsp_esp8266.h"
 
 #define PAGE_LENTH		MAX_AVS * sizeof(Str_variable_point)
 //#define PAGE_LENTH		MAX_AIS * sizeof(Str_in_point) 
@@ -20,36 +21,7 @@ extern Str_annual_routine_point annual_routines[MAX_AR];
 //#define PAGE127     0x0803f800 
 // 
 
-//void Flash_Write_Mass(void)
-//{
-//	uint8 i;
-//	uint16 pos;
-//	if(write_page_en == 1)
-//	{
-//		write_page_en = 0; 
-//		pos = 0;
-//		for(i = 0;i < MAX_VARS; i++) 
-//		{	 
-//			memcpy(&tempbuf[pos],var[i].description,21); 
-//			pos += 21;
-//			memcpy(&tempbuf[pos],var[i].label,9); 
-//			pos += 9;
-//		}
-//		for(i = 0;i < MAX_AOS; i++) 
-//		{
-//			memcpy(&tempbuf[pos],outputs[i].description,21); 
-//			pos += 21;
-//			memcpy(&tempbuf[pos],outputs[i].label,9); 
-//			pos += 9;			
-//		} 
-//		
-//		STMFLASH_Unlock();  //解锁	 
-//		STMFLASH_ErasePage(PAGE127);	//擦除这个扇区
-//		iap_write_appbin(PAGE127,tempbuf,pos); 
-//		STMFLASH_Lock();	//上锁
-//	}
-//	 
-//} 
+
 void Flash_Write_Mass(void)
 { 
 	uint16_t	len = 0 ;
@@ -108,8 +80,29 @@ void Flash_Write_Mass(void)
 		STMFLASH_Lock();
 		write_page_en[VAR_TYPE] = 0 ; 
 	}								
-		 
+	if(write_page_en[WIFI_TYPE] == 1)
+	{  
+		STMFLASH_Unlock();
+		STMFLASH_ErasePage(WIFI_PAGE_FLAG);
 
+		iap_write_appbin(WIFI_PAGE,(u8 *)(&SSID_Info),sizeof(STR_SSID)); 
+		
+		STMFLASH_WriteHalfWord(WIFI_PAGE_FLAG, 10000) ;	
+		STMFLASH_Lock();
+		write_page_en[WIFI_TYPE] = 0 ; 
+	}	 
+
+	if(write_page_en[WIFI_TYPE] == 1)
+	{  
+		STMFLASH_Unlock();
+		STMFLASH_ErasePage(WIFI_PAGE_FLAG);
+
+		iap_write_appbin(WIFI_PAGE,(u8 *)(&SSID_Info),sizeof(STR_SSID)); 
+		
+		STMFLASH_WriteHalfWord(WIFI_PAGE_FLAG, 10000) ;	
+		STMFLASH_Lock();
+		write_page_en[WIFI_TYPE] = 0 ; 
+	}
 
 }
 const uint8 Var_label[MAX_AVS][9] = {
@@ -126,34 +119,37 @@ const uint8 Var_label[MAX_AVS][9] = {
 	"CrntMode ",//9
 	"Unit     ", //10 
 	"SysMode  ",  //11
-	"spare    ",     //12
+	"MenuLock ",     //12
 	"OvrdTmr  ",//13
 	"Pid2DSP  ",//14  
 	"Pid2NSP  ",//15
 	"OUTManul ",//16 
-	"varibl18 ",//17 
-	"varibl19 ",//18
-	"varibl20 "//19  
+	"ORTLeft  ",//17 
+	"CoolDB   ",//18
+	"HeatDB   ",//19  
 };
 const uint8 Var_Description[MAX_AVS][21] = {
 	
 	"baudrate select      ",   	//0
 	"station number       ",   	//1
-	"modbus/bacnet switch ",//2
-	"instance number      ",				//3
-	"schedule enable      ",			//4
-	"pid1 day setpoint    ",					//5		 
-	"pid1 night setpoint  ",			//6
-	"fan mode             ",			//7
-	"firmware version     ", 					//8
-	"current H/C mode     ",					//9 
+	"modbus/bacnet switch ",    //2
+	"instance number      ",		//3
+	"schedule enable      ",		//4
+	"pid1 day setpoint    ",		//5		 
+	"pid1 night setpoint  ",		//6
+	"fan mode             ",		//7
+	"firmware version     ", 		//8
+	"current H/C mode     ",		//9 
 	"temprature unit      ",//10
 	"system mode          ",//11
-	"not used             ",//12
+	"Menu lock            ",//12
 	"override timer       ",//13
 	"pid2 day setpoint    ",//14
 	"pid2 night setpoint  ",//15
 	"output manual enable ",//16
+	"override timer left  ",//17
+	"cooling deadband     ",//18
+	"heating deadband     ",//19
 };
 
 const uint8 Outputs_label[MAX_OUTS][9] = {
@@ -167,13 +163,14 @@ const uint8 Outputs_label[MAX_OUTS][9] = {
 };
 
 const uint8 WR_label[MAX_WR][9] = {
- 	"WR1"
+ 	"WR1",
+	"WR2"
 };
 
 const uint8 WR_Description[MAX_WR][21] = {
  	
  	"WEEKLY ROUTINE1",
-//	"WEEKLY ROUTINE2",
+	"WEEKLY ROUTINE2",
 //	"WEEKLY ROUTINE3",
 //	"WEEKLY ROUTINE4",
 //	"WEEKLY ROUTINE5",
@@ -214,7 +211,8 @@ const uint8 Inputs_label[MAX_AIS][9] = {
 	"AI7",
 	"AI8",
 	"TEM",
-	"HUM",	
+	"HUM",
+	"CO2"	
 };
 const uint8 Inputs_Description[MAX_AIS][21] = {
  	
@@ -226,7 +224,7 @@ const uint8 Inputs_Description[MAX_AIS][21] = {
 	"Analog Input6",
 	"Analog Input7",
 	"Analog Input8",
-	"Temperatrue",
+	"Temperature",
 	"Humidity",	
 };
 
@@ -315,7 +313,7 @@ void mass_flash_init(void)
 			outputs[loop].digital_analog = 0 ;
 			outputs[loop].switch_status = 0 ;
 			outputs[loop].control = 0 ;
-			outputs[loop].read_remote = 0 ;
+			outputs[loop].out_of_service = 0 ;
 			outputs[loop].decom = 0 ;
 			outputs[loop].range = 0 ;
 			outputs[loop].sub_id = 0 ;
@@ -416,7 +414,7 @@ void mass_flash_init(void)
 		len = MAX_WR * sizeof(Str_weekly_routine_point) ;
 		memcpy(tempbuf,(void*)&weekly_routines[0], len);		
 		iap_write_appbin(WR_PAGE,(uint8_t*)tempbuf, len);	
-		STMFLASH_WriteHalfWord(WR_PAGE_FLAG, 10000) ;
+		STMFLASH_WriteHalfWord(WR_PAGE_FLAG, 10000);
 	}
 	else
 	{
@@ -443,6 +441,19 @@ void mass_flash_init(void)
 	{
 		len = MAX_AR * sizeof(Str_annual_routine_point) ;
 		STMFLASH_MUL_Read(AR_PAGE,(void *)&annual_routines[0].description[0], len ); 
+	}	
+
+	temp = STMFLASH_ReadHalfWord(WIFI_PAGE_FLAG);
+	if(temp != 10000)
+	{
+		memset(&SSID_Info,0,sizeof(STR_SSID));
+		STMFLASH_ErasePage(WIFI_PAGE_FLAG);
+		iap_write_appbin(WIFI_PAGE,(void *)(&SSID_Info), sizeof(STR_SSID));	
+		STMFLASH_WriteHalfWord(WIFI_PAGE_FLAG, 10000) ;
+	}
+	else//
+	{
+		STMFLASH_MUL_Read(WIFI_PAGE,(void *)(&SSID_Info),sizeof(STR_SSID));
 	}		
 }
 

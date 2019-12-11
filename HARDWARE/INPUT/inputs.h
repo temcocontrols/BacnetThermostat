@@ -7,8 +7,19 @@
 #include "types.h"
 #include "bacnet.h"
 #include "store.h"
+extern uint8 co2_autocal_disable;
+extern uint8 co2_present;
+extern int16 delta_temperature;
+extern signed char Hum_T_calibration;
+extern uint8 hum_sensor_type;
+extern uint8 bacnet_detect;
+extern uint8 bacnet_detect_timer;
+extern float tem_org;
+extern float hum_org;
+extern uint8 voltage_overshoot;
+extern uint16 rs485_p_voltage;
+extern uint16 rs485_n_voltage;
 extern uint16 aq_value;
-//extern uint16 pwmtest;
 extern int16 top_of_4to20ma;
 extern int16 bottom_of_4to20ma;
 extern uint16 tem_of_co2;
@@ -61,7 +72,7 @@ int16_t RangeConverter(uint8_t function, int16_t para,uint8_t i,int16_t cal);
 void inputs_init(void) ;
 void inpust_scan(void) ;
 u16 ADC_getChannal(ADC_TypeDef* ADCx, u8 channal) ;
-int16_t   look_up_customtable(et_menu_parameter id,int16_t count,uint8_t slope );
+int16_t look_up_customtable(uint8 id,int16_t count,uint8_t slope,uint8 range );
 int16_t Filter(uint8_t channel,signed input);
 uint16_t Trans_ADC(uint16_t adc_value);
 

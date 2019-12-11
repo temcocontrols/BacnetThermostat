@@ -10,13 +10,23 @@
 #define int8		signed char
 #define int32		signed long
 	
+#define EVENT_NULL    0
+#define EVENT_DHOME   1  //occupied
+#define EVENT_WORK    2  //unoccupied
+//#define EVENT_NHOME   3
+#define EVENT_SLEEP   3
+#define EVENT_AWAY    4
+	
 #ifdef TSTAT_ZIGBEE
 extern uint8 read_zgb_index;
 extern uint8 zigbee_rssi;
 extern uint8 zigbee_index;
 extern uint8 zigbee_point_info[48];
 #endif
-
+extern uint8 schedule_change;
+uint8 cal_holiday(void);
+extern uint16 event[7];
+extern uint8 occ_flag;
 extern uint16_t flash_buf[2];
 extern uint8 icon_flag[9];
 extern uint8 deadmaster_triggered;
@@ -36,6 +46,7 @@ extern uint16_t outsidetem_timer;
 extern uint8 outside_tem_flag;
 extern uint8 fan_name_check;
 extern uint8 blink_flag;
+extern uint8 item_menu_timer;
 extern uint8 sp_blink_timer;
 extern uint8 fan_blink_timer;
 extern uint8 hc_blink_timer;
@@ -102,10 +113,12 @@ void init_pwm_operation_eeprom(void);
 void decrease_cooling_setpoint(void) ;
 //void decrease_fan_speed(void) ;
 void increase_sysmode(void);
+void decrease_sysmode(void);
 void decrease_parameter(void ) ;
 void exit_menu_mode(void) ;
 void increase_cooling_setpoint(void) ;
 void increase_fan_speed(void) ;
+void  decrease_fan_speed(void);
 void increase_parameter(void) ;
 void start_setpoint_mode(void) ;
 void start_normal_mode(void) ;
@@ -160,6 +173,7 @@ void icon_control_output(uint8 icon_name);
 //}pid; 
 
 //extern STRCTPID newpid;
+uint8 cal_ds(uint16 num);
 
 
 

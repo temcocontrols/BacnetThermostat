@@ -125,6 +125,22 @@ extern int16 pidtest3;
 	#define PID_AVERAGE_TEMPERATURE_AI1_TO_AI4	  	18
 #endif
 
+#ifndef	THERMISTER_TYPE3
+	#define THERMISTER_TYPE3	  	19
+#endif
+
+
+#ifndef	THERMISTER_TYPE50K
+	#define THERMISTER_TYPE50K	  	20
+#endif
+
+
+
+#ifndef	PID_DELTA_TEMPERATURE
+	#define PID_DELTA_TEMPERATURE	  	21
+#endif
+
+
 #ifndef DAY_MODE
 	#define DAY_MODE  			  	1
 #endif

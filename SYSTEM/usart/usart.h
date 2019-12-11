@@ -28,6 +28,8 @@ void uart4_init(u32 bound);
 #ifdef TSTAT_CO2
 void uart3_init(u32 bound);
 #endif//TSTAT_CO2
+void uart5_init(u32 bound);
+
 
 #define EN_USART1_RX 			1		//使能（1）/禁止（0）串口1接收
 #define EN_USART2_RX 			1		//使能（1）/禁止（0）串口1接收

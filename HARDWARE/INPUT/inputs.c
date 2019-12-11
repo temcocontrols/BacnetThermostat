@@ -9,9 +9,19 @@
 #include  "Constcode.h"
 #include "TstatFunctions.h"
 #include "gpio_define.h"
+#include "sht3x.h"
+#include "pid.h"
+
+uint8 co2_autocal_disable;
+uint8 co2_present = 0;
+int8 Hum_T_calibration = 0;
+uint8 hum_sensor_type = 0; // 0 :htu21d  1:sht3x
+float tem_org = 0;
+float hum_org = 0;
+uint8 voltage_overshoot = 0;
 uint16 aq_value = 0;
 //uint16 pwmtest = 0;
-extern int16 ctest[10];
+//extern uint16 ctest[10];
 int16 top_of_4to20ma;
 int16 bottom_of_4to20ma;
 uint16 tem_of_co2 = 0;
@@ -28,7 +38,7 @@ extern int16 idata loop_setpoint[3] ;
 //int16 frc_outdoortemvalue = 0;
 //int16 frc_indoorhumvalue = 0;
 //int16 frc_outdoorhumvalue = 0;
-//uint8 frc_config = 0;//check if the setting is legal, each bit of byte indicate one setting state \  
+//uint8 frc_config = 0;//check if the setting is legal, each bit of byte indicate one setting state 
 ////b0:	space temperatuer block 
 ////b1:	supply temperature block
 ////b2:	outdoor temperature block
@@ -50,6 +60,8 @@ int16 frc_outdoorhum_enthalpy = 0;
 int16 frc_indoorhum_enthalpy = 0;
 int16 ao1_fdbk;
 int16 ao2_fdbk;
+uint16 rs485_p_voltage = 0;
+uint16 rs485_n_voltage = 0; 
 int16 outside_tem = 333;
 uint16 light_sensor = 0;
 uint16 pir_value = 0;
@@ -67,11 +79,14 @@ int16 mul_analog_in_buffer[10];
 int16 mul_analog_input[10];
 uint8 slope_type[2];
 uint16 co2_data = 400;
+uint16 co2_data_org = 400;
 int16 humidity = 0;									
 int16 temperature = 0; // global temperature x 10, filtered
 int16 temperature_c = 0; 
 int16 temperature_f = 0;
 int16 internal_calibration = 0;
+
+int16 delta_temperature;
 
 int16 temperature_internal;
 int16 temperature_org;
@@ -91,50 +106,110 @@ const uint8 channel[MAX_AI_CHANNEL] = {11,12,13,14};
 
 static void INPUT_TYPE0_OUT(u8 status)
 {
-	if(status) 
-		GPIO_SetBits(gpio_map[INPUT_TYPE0].GPIOX, gpio_map[INPUT_TYPE0].GPIO_Pin_X);
+	if(HardwareVersion < HW_VERSION_OVERSHOOT )
+	{
+		if(status) 
+			GPIO_SetBits(gpio_map[INPUT_TYPE0].GPIOX, gpio_map[INPUT_TYPE0].GPIO_Pin_X);
+		else
+			GPIO_ResetBits(gpio_map[INPUT_TYPE0].GPIOX, gpio_map[INPUT_TYPE0].GPIO_Pin_X); 
+	}
 	else
-		GPIO_ResetBits(gpio_map[INPUT_TYPE0].GPIOX, gpio_map[INPUT_TYPE0].GPIO_Pin_X); 
+	{
+		if(status) 
+			GPIO_SetBits(GPIOE, GPIO_Pin_1);
+		else
+			GPIO_ResetBits(GPIOE, GPIO_Pin_1); 	
+	}
 }
 
 static void INPUT_TYPE1_OUT(u8 status)
 {
-	if(status) 
-		GPIO_SetBits(gpio_map[INPUT_TYPE1].GPIOX, gpio_map[INPUT_TYPE1].GPIO_Pin_X);
+	if(HardwareVersion < HW_VERSION_OVERSHOOT )
+	{
+		if(status) 
+			GPIO_SetBits(gpio_map[INPUT_TYPE1].GPIOX, gpio_map[INPUT_TYPE1].GPIO_Pin_X);
+		else
+			GPIO_ResetBits(gpio_map[INPUT_TYPE1].GPIOX, gpio_map[INPUT_TYPE1].GPIO_Pin_X); 
+	}
 	else
-		GPIO_ResetBits(gpio_map[INPUT_TYPE1].GPIOX, gpio_map[INPUT_TYPE1].GPIO_Pin_X); 
+	{
+		if(status) 
+			GPIO_SetBits(GPIOE, GPIO_Pin_0);
+		else
+			GPIO_ResetBits(GPIOE, GPIO_Pin_0); 	
+	}
 }
 
 static void CHSEL0_OUT(u8 status)
 {
-	if(status) 
-		GPIO_SetBits(gpio_map[CHSEL0].GPIOX, gpio_map[CHSEL0].GPIO_Pin_X);
+	if(HardwareVersion < HW_VERSION_OVERSHOOT )
+	{	
+		if(status) 
+			GPIO_SetBits(gpio_map[CHSEL0].GPIOX, gpio_map[CHSEL0].GPIO_Pin_X);
+		else
+			GPIO_ResetBits(gpio_map[CHSEL0].GPIOX, gpio_map[CHSEL0].GPIO_Pin_X);
+	}
 	else
-		GPIO_ResetBits(gpio_map[CHSEL0].GPIOX, gpio_map[CHSEL0].GPIO_Pin_X); 
+	{
+		if(status) 
+			GPIO_SetBits(GPIOE, GPIO_Pin_4);
+		else
+			GPIO_ResetBits(GPIOE, GPIO_Pin_4); 		
+	}		
 }
 
 static void CHSEL1_OUT(u8 status)
 {
+	if(HardwareVersion < HW_VERSION_OVERSHOOT )
+	{	
 	if(status) 
-		GPIO_SetBits(gpio_map[CHSEL1].GPIOX, gpio_map[CHSEL1].GPIO_Pin_X);
+			GPIO_SetBits(gpio_map[CHSEL1].GPIOX, gpio_map[CHSEL1].GPIO_Pin_X);
+		else
+			GPIO_ResetBits(gpio_map[CHSEL1].GPIOX, gpio_map[CHSEL1].GPIO_Pin_X);
+	}
 	else
-		GPIO_ResetBits(gpio_map[CHSEL1].GPIOX, gpio_map[CHSEL1].GPIO_Pin_X); 
+	{
+		if(status) 
+			GPIO_SetBits(GPIOE, GPIO_Pin_3);
+		else
+			GPIO_ResetBits(GPIOE, GPIO_Pin_3);	
+	}
 }
 
 static void CHSEL2_OUT(u8 status)
 {
+	if(HardwareVersion < HW_VERSION_OVERSHOOT )
+	{	
 	if(status) 
 		GPIO_SetBits(gpio_map[CHSEL2].GPIOX, gpio_map[CHSEL2].GPIO_Pin_X);
 	else
 		GPIO_ResetBits(gpio_map[CHSEL2].GPIOX, gpio_map[CHSEL2].GPIO_Pin_X); 
+	}
+	else
+	{
+		if(status) 
+			GPIO_SetBits(GPIOE, GPIO_Pin_2);
+		else
+			GPIO_ResetBits(GPIOE, GPIO_Pin_2);	
+	}
 }
 
 static void AI_MODE_OUT(u8 status)
 {
-	if(status) 
-		GPIO_SetBits(gpio_map[AI_MODE_SEL].GPIOX, gpio_map[AI_MODE_SEL].GPIO_Pin_X);
+	if(HardwareVersion < HW_VERSION_OVERSHOOT )
+	{	
+		if(status) 
+			GPIO_SetBits(gpio_map[AI_MODE_SEL].GPIOX, gpio_map[AI_MODE_SEL].GPIO_Pin_X);
+		else
+			GPIO_ResetBits(gpio_map[AI_MODE_SEL].GPIOX, gpio_map[AI_MODE_SEL].GPIO_Pin_X);
+	}
 	else
-		GPIO_ResetBits(gpio_map[AI_MODE_SEL].GPIOX, gpio_map[AI_MODE_SEL].GPIO_Pin_X); 
+	{
+		if(status) 
+			GPIO_SetBits(GPIOE, GPIO_Pin_5);
+		else
+			GPIO_ResetBits(GPIOE, GPIO_Pin_5);		
+	}
 }
 
 
@@ -142,25 +217,25 @@ static void AI_MODE_OUT(u8 status)
 void inputs_io_init(void)
 {
 GPIO_InitTypeDef	GPIO_InitStructure;
-GPIO_InitTypeDef AI_1;
-GPIO_InitTypeDef AI_2;
-GPIO_InitTypeDef AI_3;
-GPIO_InitTypeDef AI_4;	
-GPIO_InitTypeDef INPUT_TYPE0;
-GPIO_InitTypeDef INPUT_TYPE1;
-GPIO_InitTypeDef CHSEL0;
-GPIO_InitTypeDef CHSEL1;
-GPIO_InitTypeDef CHSEL2;	
-GPIO_InitTypeDef AI_MODE_SEL;
+//GPIO_InitTypeDef AI_1;
+//GPIO_InitTypeDef AI_2;
+//GPIO_InitTypeDef AI_3;
+//GPIO_InitTypeDef AI_4;	
+//GPIO_InitTypeDef INPUT_TYPE0;
+//GPIO_InitTypeDef INPUT_TYPE1;
+//GPIO_InitTypeDef CHSEL0;
+//GPIO_InitTypeDef CHSEL1;
+//GPIO_InitTypeDef CHSEL2;	
+//GPIO_InitTypeDef AI_MODE_SEL;
 GPIO_InitTypeDef LIGHT_SENSOR;
 GPIO_InitTypeDef PIR_SENSOR;	
-GPIO_InitTypeDef AO1_FEEDBACK;
-GPIO_InitTypeDef AO2_FEEDBACK;		
+//GPIO_InitTypeDef AO1_FEEDBACK;
+//GPIO_InitTypeDef AO2_FEEDBACK;		
 	
-GPIO_InitStructure.GPIO_Pin = GPIO_Pin_4|GPIO_Pin_5|GPIO_Pin_6|GPIO_Pin_7;  
-GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AIN; 
-GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;	
-GPIO_Init(GPIOA, &GPIO_InitStructure);
+//GPIO_InitStructure.GPIO_Pin = GPIO_Pin_4|GPIO_Pin_5|GPIO_Pin_6|GPIO_Pin_7;  
+//GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AIN; 
+//GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;	
+//GPIO_Init(GPIOA, &GPIO_InitStructure);
 
 LIGHT_SENSOR.GPIO_Pin = GPIO_Pin_0;  
 LIGHT_SENSOR.GPIO_Mode = GPIO_Mode_AIN; 
@@ -172,67 +247,35 @@ PIR_SENSOR.GPIO_Mode = GPIO_Mode_AIN;
 PIR_SENSOR.GPIO_Speed = GPIO_Speed_2MHz;	
 GPIO_Init(GPIOB, &PIR_SENSOR);
 	
-AO1_FEEDBACK.GPIO_Pin = GPIO_Pin_1;  
-AO1_FEEDBACK.GPIO_Mode = GPIO_Mode_AIN; 
-AO1_FEEDBACK.GPIO_Speed = GPIO_Speed_2MHz;	
-GPIO_Init(GPIOA, &AO1_FEEDBACK);
+//AO1_FEEDBACK.GPIO_Pin = GPIO_Pin_1;  
+//AO1_FEEDBACK.GPIO_Mode = GPIO_Mode_AIN; 
+//AO1_FEEDBACK.GPIO_Speed = GPIO_Speed_2MHz;	
+//GPIO_Init(GPIOA, &AO1_FEEDBACK);
 
-AO2_FEEDBACK.GPIO_Pin = GPIO_Pin_4;  
-AO2_FEEDBACK.GPIO_Mode = GPIO_Mode_AIN; 
-AO2_FEEDBACK.GPIO_Speed = GPIO_Speed_2MHz;	
-GPIO_Init(GPIOA, &AO2_FEEDBACK);
+//AO2_FEEDBACK.GPIO_Pin = GPIO_Pin_4;  
+//AO2_FEEDBACK.GPIO_Mode = GPIO_Mode_AIN; 
+//AO2_FEEDBACK.GPIO_Speed = GPIO_Speed_2MHz;	
+//GPIO_Init(GPIOA, &AO2_FEEDBACK);
 	
-AI_1.GPIO_Pin = GPIO_Pin_1; 
-AI_1.GPIO_Mode = GPIO_Mode_AIN; 
-AI_1.GPIO_Speed = GPIO_Speed_2MHz;	
-GPIO_Init(GPIOC, &AI_1);	
+GPIO_InitStructure.GPIO_Pin = GPIO_Pin_1 | GPIO_Pin_2 | GPIO_Pin_3 | GPIO_Pin_4; 
+GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AIN; 
+GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;	
+GPIO_Init(GPIOC, &GPIO_InitStructure);	
 
-AI_2.GPIO_Pin = GPIO_Pin_2; 
-AI_2.GPIO_Mode = GPIO_Mode_AIN; 
-AI_2.GPIO_Speed = GPIO_Speed_2MHz;	
-GPIO_Init(GPIOC, &AI_2);
+//AI_2.GPIO_Pin = GPIO_Pin_2; 
+//AI_2.GPIO_Mode = GPIO_Mode_AIN; 
+//AI_2.GPIO_Speed = GPIO_Speed_2MHz;	
+//GPIO_Init(GPIOC, &AI_2);
 
-AI_3.GPIO_Pin = GPIO_Pin_3; 
-AI_3.GPIO_Mode = GPIO_Mode_AIN; 
-AI_3.GPIO_Speed = GPIO_Speed_2MHz;	
-GPIO_Init(GPIOC, &AI_3);
+//AI_3.GPIO_Pin = GPIO_Pin_3; 
+//AI_3.GPIO_Mode = GPIO_Mode_AIN; 
+//AI_3.GPIO_Speed = GPIO_Speed_2MHz;	
+//GPIO_Init(GPIOC, &AI_3);
 
-AI_4.GPIO_Pin = GPIO_Pin_4; 
-AI_4.GPIO_Mode = GPIO_Mode_AIN; 
-AI_4.GPIO_Speed = GPIO_Speed_2MHz;	
-GPIO_Init(GPIOC, &AI_4);
-
-
-	
-//INPUT_TYPE0.GPIO_Pin = GPIO_Pin_3;  
-//INPUT_TYPE0.GPIO_Mode = GPIO_Mode_Out_PP; 
-//INPUT_TYPE0.GPIO_Speed = GPIO_Speed_2MHz;	
-//GPIO_Init(GPIOC, &INPUT_TYPE0);		
-
-//INPUT_TYPE1.GPIO_Pin = GPIO_Pin_2;  
-//INPUT_TYPE1.GPIO_Mode = GPIO_Mode_Out_PP; 
-//INPUT_TYPE1.GPIO_Speed = GPIO_Speed_2MHz;
-//GPIO_Init(GPIOC, &INPUT_TYPE1);		
-
-//CHSEL0.GPIO_Pin = GPIO_Pin_6;  
-//CHSEL0.GPIO_Mode = GPIO_Mode_Out_PP; 
-//CHSEL0.GPIO_Speed = GPIO_Speed_2MHz;
-//GPIO_Init(GPIOA, &CHSEL0);	
-
-//CHSEL1.GPIO_Pin = GPIO_Pin_7;  
-//CHSEL1.GPIO_Mode = GPIO_Mode_Out_PP; 
-//CHSEL1.GPIO_Speed = GPIO_Speed_2MHz;
-//GPIO_Init(GPIOA, &CHSEL1);	
-
-//CHSEL2.GPIO_Pin = GPIO_Pin_4;  
-//CHSEL2.GPIO_Mode = GPIO_Mode_Out_PP; 
-//CHSEL2.GPIO_Speed = GPIO_Speed_2MHz;
-//GPIO_Init(GPIOC, &CHSEL2);	
-
-//AI_MODE_SEL.GPIO_Pin = GPIO_Pin_5;  
-//AI_MODE_SEL.GPIO_Mode = GPIO_Mode_Out_PP; 
-//AI_MODE_SEL.GPIO_Speed = GPIO_Speed_2MHz;
-//GPIO_Init(GPIOA, &AI_MODE_SEL);	
+//AI_4.GPIO_Pin = GPIO_Pin_4; 
+//AI_4.GPIO_Mode = GPIO_Mode_AIN; 
+//AI_4.GPIO_Speed = GPIO_Speed_2MHz;	
+//GPIO_Init(GPIOC, &AI_4);
 
 /**************************PortC configure----ADC1*****************************************/
 RCC_APB2PeriphClockCmd( RCC_APB2Periph_ADC1, ENABLE);
@@ -260,102 +303,162 @@ void inputs_adc_init(void)
   while(ADC_GetCalibrationStatus(ADC1) == SET);
 }
 
-
-
-#else
+#else  //TSTAT8
 
 void inputs_io_init(void)
 {
 GPIO_InitTypeDef GPIO_InitStructure;
-GPIO_InitTypeDef INPUT_TYPE0;
-GPIO_InitTypeDef INPUT_TYPE1;
-GPIO_InitTypeDef CHSEL0;
-GPIO_InitTypeDef CHSEL1;
-GPIO_InitTypeDef CHSEL2;	
-GPIO_InitTypeDef AI_MODE_SEL;
-GPIO_InitTypeDef LIGHT_SENSOR;
-GPIO_InitTypeDef PIR_SENSOR;	
-GPIO_InitTypeDef AO1_FEEDBACK;
-GPIO_InitTypeDef AO2_FEEDBACK;	
+//GPIO_InitTypeDef INPUT_TYPE0;
+//GPIO_InitTypeDef INPUT_TYPE1;
+//GPIO_InitTypeDef CHSEL0;
+//GPIO_InitTypeDef CHSEL1;
+//GPIO_InitTypeDef CHSEL2;	
+//GPIO_InitTypeDef AI_MODE_SEL;
+//GPIO_InitTypeDef LIGHT_SENSOR;
+//GPIO_InitTypeDef PIR_SENSOR;	
+//GPIO_InitTypeDef AO1_FEEDBACK;
+//GPIO_InitTypeDef AO2_FEEDBACK;	
 GPIO_InitTypeDef AQ_ENABLE;
 GPIO_InitTypeDef AQ_INPUT;	
 GPIO_InitTypeDef CO2_ENABLE;
+GPIO_InitTypeDef RS485_P;
+GPIO_InitTypeDef RS485_N;
 	
-GPIO_InitStructure.GPIO_Pin = GPIO_Pin_4|GPIO_Pin_5|GPIO_Pin_6|GPIO_Pin_7;  
+GPIO_InitStructure.GPIO_Pin = GPIO_Pin_1 | GPIO_Pin_4|GPIO_Pin_5|GPIO_Pin_6|GPIO_Pin_7;  
 GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AIN; 
 GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;	
 GPIO_Init(GPIOA, &GPIO_InitStructure);
 
-LIGHT_SENSOR.GPIO_Pin = GPIO_Pin_0;  
-LIGHT_SENSOR.GPIO_Mode = GPIO_Mode_AIN; 
-LIGHT_SENSOR.GPIO_Speed = GPIO_Speed_2MHz;	
-GPIO_Init(GPIOB, &LIGHT_SENSOR);
+GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1;  
+GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AIN; 
+GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;	
+GPIO_Init(GPIOB, &GPIO_InitStructure);
 
-PIR_SENSOR.GPIO_Pin = GPIO_Pin_1;  
-PIR_SENSOR.GPIO_Mode = GPIO_Mode_AIN; 
-PIR_SENSOR.GPIO_Speed = GPIO_Speed_2MHz;	
-GPIO_Init(GPIOB, &PIR_SENSOR);
+//PIR_SENSOR.GPIO_Pin = GPIO_Pin_1;  
+//PIR_SENSOR.GPIO_Mode = GPIO_Mode_AIN; 
+//PIR_SENSOR.GPIO_Speed = GPIO_Speed_2MHz;	
+//GPIO_Init(GPIOB, &PIR_SENSOR);
 	
-AO1_FEEDBACK.GPIO_Pin = GPIO_Pin_1;  
-AO1_FEEDBACK.GPIO_Mode = GPIO_Mode_AIN; 
-AO1_FEEDBACK.GPIO_Speed = GPIO_Speed_2MHz;	
-GPIO_Init(GPIOA, &AO1_FEEDBACK);
+//AO1_FEEDBACK.GPIO_Pin = GPIO_Pin_1;  
+//AO1_FEEDBACK.GPIO_Mode = GPIO_Mode_AIN; 
+//AO1_FEEDBACK.GPIO_Speed = GPIO_Speed_2MHz;	
+//GPIO_Init(GPIOA, &AO1_FEEDBACK);
 
-AO2_FEEDBACK.GPIO_Pin = GPIO_Pin_4;  
-AO2_FEEDBACK.GPIO_Mode = GPIO_Mode_AIN; 
-AO2_FEEDBACK.GPIO_Speed = GPIO_Speed_2MHz;	
-GPIO_Init(GPIOA, &AO2_FEEDBACK);
+//AO2_FEEDBACK.GPIO_Pin = GPIO_Pin_4;  
+//AO2_FEEDBACK.GPIO_Mode = GPIO_Mode_AIN; 
+//AO2_FEEDBACK.GPIO_Speed = GPIO_Speed_2MHz;	
+//GPIO_Init(GPIOA, &AO2_FEEDBACK);
 	
-GPIO_InitStructure.GPIO_Pin = GPIO_Pin_1; 
+GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1; 
 GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AIN; 
 GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;	
 GPIO_Init(GPIOC, &GPIO_InitStructure);	
+
+if(HardwareVersion<5)//(HardwareVersion < 5)
+{
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_2 | GPIO_Pin_3 | GPIO_Pin_4;  
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP; 
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;	
+	GPIO_Init(GPIOC, &GPIO_InitStructure);		
+
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_5 | GPIO_Pin_6 | GPIO_Pin_7;  
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP; 
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;	
+	GPIO_Init(GPIOA, &GPIO_InitStructure);
+//	INPUT_TYPE1.GPIO_Pin = GPIO_Pin_2;  
+//	INPUT_TYPE1.GPIO_Mode = GPIO_Mode_Out_PP; 
+//	INPUT_TYPE1.GPIO_Speed = GPIO_Speed_2MHz;
+//	GPIO_Init(GPIOC, &INPUT_TYPE1);		
+
+//	CHSEL0.GPIO_Pin = GPIO_Pin_6;  
+//	CHSEL0.GPIO_Mode = GPIO_Mode_Out_PP; 
+//	CHSEL0.GPIO_Speed = GPIO_Speed_2MHz;
+//	GPIO_Init(GPIOA, &CHSEL0);	
+
+//	CHSEL1.GPIO_Pin = GPIO_Pin_7;  
+//	CHSEL1.GPIO_Mode = GPIO_Mode_Out_PP; 
+//	CHSEL1.GPIO_Speed = GPIO_Speed_2MHz;
+//	GPIO_Init(GPIOA, &CHSEL1);	
+
+//	CHSEL2.GPIO_Pin = GPIO_Pin_4;  
+//	CHSEL2.GPIO_Mode = GPIO_Mode_Out_PP; 
+//	CHSEL2.GPIO_Speed = GPIO_Speed_2MHz;
+//	GPIO_Init(GPIOC, &CHSEL2);	
+
+//	AI_MODE_SEL.GPIO_Pin = GPIO_Pin_5;  
+//	AI_MODE_SEL.GPIO_Mode = GPIO_Mode_Out_PP; 
+//	AI_MODE_SEL.GPIO_Speed = GPIO_Speed_2MHz;
+//	GPIO_Init(GPIOA, &AI_MODE_SEL);	
+}
+else
+{
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_2 | GPIO_Pin_3 | GPIO_Pin_4 | GPIO_Pin_5;  
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP; 
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;	
+	GPIO_Init(GPIOE, &GPIO_InitStructure);		
+
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_2 | GPIO_Pin_3;  
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP; 
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;	
+	GPIO_Init(GPIOC, &GPIO_InitStructure);
 	
-INPUT_TYPE0.GPIO_Pin = GPIO_Pin_3;  
-INPUT_TYPE0.GPIO_Mode = GPIO_Mode_Out_PP; 
-INPUT_TYPE0.GPIO_Speed = GPIO_Speed_2MHz;	
-GPIO_Init(GPIOC, &INPUT_TYPE0);		
+//  INPUT_TYPE0.GPIO_Pin = GPIO_Pin_1;  
+//	INPUT_TYPE0.GPIO_Mode = GPIO_Mode_Out_PP; 
+//	INPUT_TYPE0.GPIO_Speed = GPIO_Speed_2MHz;	
+//	GPIO_Init(GPIOE, &INPUT_TYPE0);		
 
-INPUT_TYPE1.GPIO_Pin = GPIO_Pin_2;  
-INPUT_TYPE1.GPIO_Mode = GPIO_Mode_Out_PP; 
-INPUT_TYPE1.GPIO_Speed = GPIO_Speed_2MHz;
-GPIO_Init(GPIOC, &INPUT_TYPE1);		
+//	INPUT_TYPE1.GPIO_Pin = GPIO_Pin_0;  
+//	INPUT_TYPE1.GPIO_Mode = GPIO_Mode_Out_PP; 
+//	INPUT_TYPE1.GPIO_Speed = GPIO_Speed_2MHz;
+//	GPIO_Init(GPIOE, &INPUT_TYPE1);		
 
-CHSEL0.GPIO_Pin = GPIO_Pin_6;  
-CHSEL0.GPIO_Mode = GPIO_Mode_Out_PP; 
-CHSEL0.GPIO_Speed = GPIO_Speed_2MHz;
-GPIO_Init(GPIOA, &CHSEL0);	
+//	CHSEL0.GPIO_Pin = GPIO_Pin_4;  
+//	CHSEL0.GPIO_Mode = GPIO_Mode_Out_PP; 
+//	CHSEL0.GPIO_Speed = GPIO_Speed_2MHz;
+//	GPIO_Init(GPIOE, &CHSEL0);	
 
-CHSEL1.GPIO_Pin = GPIO_Pin_7;  
-CHSEL1.GPIO_Mode = GPIO_Mode_Out_PP; 
-CHSEL1.GPIO_Speed = GPIO_Speed_2MHz;
-GPIO_Init(GPIOA, &CHSEL1);	
+//	CHSEL1.GPIO_Pin = GPIO_Pin_3;  
+//	CHSEL1.GPIO_Mode = GPIO_Mode_Out_PP; 
+//	CHSEL1.GPIO_Speed = GPIO_Speed_2MHz;
+//	GPIO_Init(GPIOE, &CHSEL1);	
 
-CHSEL2.GPIO_Pin = GPIO_Pin_4;  
-CHSEL2.GPIO_Mode = GPIO_Mode_Out_PP; 
-CHSEL2.GPIO_Speed = GPIO_Speed_2MHz;
-GPIO_Init(GPIOC, &CHSEL2);	
+//	CHSEL2.GPIO_Pin = GPIO_Pin_2;  
+//	CHSEL2.GPIO_Mode = GPIO_Mode_Out_PP; 
+//	CHSEL2.GPIO_Speed = GPIO_Speed_2MHz;
+//	GPIO_Init(GPIOE, &CHSEL2);	
 
-AI_MODE_SEL.GPIO_Pin = GPIO_Pin_5;  
-AI_MODE_SEL.GPIO_Mode = GPIO_Mode_Out_PP; 
-AI_MODE_SEL.GPIO_Speed = GPIO_Speed_2MHz;
-GPIO_Init(GPIOA, &AI_MODE_SEL);	
+//	AI_MODE_SEL.GPIO_Pin = GPIO_Pin_5;  
+//	AI_MODE_SEL.GPIO_Mode = GPIO_Mode_Out_PP; 
+//	AI_MODE_SEL.GPIO_Speed = GPIO_Speed_2MHz;
+//	GPIO_Init(GPIOE, &AI_MODE_SEL);	
+//	
+//	RS485_P.GPIO_Pin = GPIO_Pin_2;  
+//	RS485_P.GPIO_Mode = GPIO_Mode_AIN; 
+//	RS485_P.GPIO_Speed = GPIO_Speed_2MHz;	
+//	GPIO_Init(GPIOC, &RS485_P);
+//	
+//	RS485_N.GPIO_Pin = GPIO_Pin_3;  
+//	RS485_N.GPIO_Mode = GPIO_Mode_AIN; 
+//	RS485_N.GPIO_Speed = GPIO_Speed_2MHz;	
+//	GPIO_Init(GPIOC, &RS485_N);
+}
 
+//AQ_INPUT.GPIO_Pin = GPIO_Pin_0; 
+//AQ_INPUT.GPIO_Mode = GPIO_Mode_AIN; 
+//AQ_INPUT.GPIO_Speed = GPIO_Speed_2MHz;	
+//GPIO_Init(GPIOC, &AQ_INPUT);
 
-AQ_INPUT.GPIO_Pin = GPIO_Pin_0; 
-AQ_INPUT.GPIO_Mode = GPIO_Mode_AIN; 
-AQ_INPUT.GPIO_Speed = GPIO_Speed_2MHz;	
-GPIO_Init(GPIOC, &AQ_INPUT);
-
-AQ_ENABLE.GPIO_Pin = GPIO_Pin_2;  
-AQ_ENABLE.GPIO_Mode = GPIO_Mode_Out_PP; 
-AQ_ENABLE.GPIO_Speed = GPIO_Speed_2MHz;
-GPIO_Init(GPIOE, &AQ_ENABLE);	
+//AQ_ENABLE.GPIO_Pin = GPIO_Pin_2;  
+//AQ_ENABLE.GPIO_Mode = GPIO_Mode_Out_PP; 
+//AQ_ENABLE.GPIO_Speed = GPIO_Speed_2MHz;
+//GPIO_Init(GPIOE, &AQ_ENABLE);	
 
 CO2_ENABLE.GPIO_Pin = GPIO_Pin_9;  
 CO2_ENABLE.GPIO_Mode = GPIO_Mode_Out_PP; 
 CO2_ENABLE.GPIO_Speed = GPIO_Speed_2MHz;
-GPIO_Init(GPIOE, &CO2_ENABLE);	
+GPIO_Init(GPIOB, &CO2_ENABLE);
+
+
 /**************************PortC configure----ADC1*****************************************/
 RCC_APB2PeriphClockCmd( RCC_APB2Periph_ADC1, ENABLE);
 }
@@ -386,53 +489,145 @@ void inputs_adc_init(void)
 
 #endif
 
+int32    val;
 
-int16 look_up_customtable(et_menu_parameter id,int16 count,uint8 slope )
+//int16_t look_up_customtable(uint8_t id,int16_t count,uint8_t slope,uint8 range )
+//{
+//	int16    val;
+//  int8  index=10;
+//	int16    work_var;
+//	 	 
+//	work_var = (int16)(CustomerTable1( id + (index<<1) + 1)<<8) + CustomerTable1(id + (index<<1));		  
+//	if ( count >= 1023)
+//	{
+//		val =  work_var;
+//		return ( val );		
+//	}
+//	index = count*10/1023;
+//	if(slope)
+//	{
+//		work_var = (int16)(CustomerTable1(id +((index + 1)<<1) + 1)<<8) + CustomerTable1(id + ((index + 1)<<1));
+//	
+//		work_var -= (int16)(CustomerTable1(id + (index<<1) + 1)<<8) + CustomerTable1(id + (index<<1)); 
+//	
+//		val = (float)(count*10-1023*index)/1023*work_var;
+//	
+//		val += (int16)(CustomerTable1(id + (index<<1) + 1)<<8) + CustomerTable1(id + (index << 1));
+//	}
+//	else
+//	{
+//	
+//		work_var = (int16)(CustomerTable2(id +(index<<1) + 1)<<8) + CustomerTable2(id + (index<<1));
+//	
+//		work_var -= (int16)(CustomerTable2(id + ((index + 1)<<1) + 1)<<8) + CustomerTable2(id + ((index + 1)<<1)); 
+//	 
+//	 	val = (float)(1023*(index+1) - count*10)/1023*work_var;
+//	  
+//		val += (int16)(CustomerTable2(id + ((index + 1)<<1) + 1)<<8) + CustomerTable2(id + ((index + 1) << 1));
+//	}
+
+//	return( val );
+//}
+
+int16 look_up_customtable(uint8 id,int16 count,uint8 slope,uint8 range )
 {
-	int16    val;
-    int8  index=10;
-	int16    work_var;
-	 	 
-	work_var = (int16)(read_eeprom(id + (index<<1) + 1)<<8) + read_eeprom(id + (index<<1));		  
+//	int32    val;
+  int16  index=10;
+	int32    work_var;
+	uint16 range_para;
+	
+	if((range == AI_RANGE_USER)||(range == AI_RANGE_CUSTOMER_SENSOR))
+		range_para = 500;
+	else if((range == AI_RANGE_USER_10V)||(range == AI_RANGE_CUSTOMER_SENSOR_10V))
+		range_para = 1000;
+	work_var = ((int16)CustomerTable1(id + (index<<1) + 1)<<8) + CustomerTable1(id + (index<<1));		  
+
 	if ( count >= 1023)
 	{
 		val =  work_var;
 		return ( val );		
 	}
-	index = count*10/1023;
+	index = count*10/range_para;
 	if(slope)
 	{
-		work_var = (int16)(read_eeprom(id +((index + 1)<<1) + 1)<<8) + read_eeprom(id + ((index + 1)<<1));
-	
-		work_var -= (int16)(read_eeprom(id + (index<<1) + 1)<<8) + read_eeprom(id + (index<<1)); 
-	
-		val = (float)(count*10-1023*index)/1023*work_var;
-	
-		val += (int16)(read_eeprom(id + (index<<1) + 1)<<8) + read_eeprom(id + (index << 1));
+		work_var = ((int32)CustomerTable1(id +((index + 1)<<1) + 1)<<8) + CustomerTable1(id + ((index + 1)<<1));
+		work_var -= ((int32)CustomerTable1(id + (index<<1) + 1)<<8) + CustomerTable1(id + (index<<1)); 	
+		val = count*10;
+		val = val - range_para*index;
+		val = (val*work_var /range_para);
+		val += ((int32)CustomerTable1(id + (index<<1) + 1)<<8) + CustomerTable1(id + (index << 1));
 	}
+
 	else
 	{
 	
-		work_var = (int16)(read_eeprom(id +(index<<1) + 1)<<8) + read_eeprom(id + (index<<1));
+		work_var = ((int32)CustomerTable2(id +(index<<1) + 1)<<8) + CustomerTable2(id + (index<<1));
 	
-		work_var -= (int16)(read_eeprom(id + ((index + 1)<<1) + 1)<<8) + read_eeprom(id + ((index + 1)<<1)); 
+		work_var -= ((int32)CustomerTable2(id + ((index + 1)<<1) + 1)<<8) + CustomerTable2(id + ((index + 1)<<1)); 
 	 
-	 	val = (float)(1023*(index+1) - count*10)/1023*work_var;
+	 	val = ((float)(index+1)*range_para - count*10)*work_var/range_para;
 	  
-		val += (int16)(read_eeprom(id + ((index + 1)<<1) + 1)<<8) + read_eeprom(id + ((index + 1) << 1));
+		val += ((int32)CustomerTable2(id + ((index + 1)<<1) + 1)<<8) + CustomerTable2(id + ((index + 1) << 1));
 	}
 
-	return( val );
+	return( (int16)val );
 }
+
+
+
+
+//int16 look_up_customtable(et_menu_parameter id,int16 count,uint8 slope,uint8 range )
+//{
+////	int32    val;
+//  int16  index=10;
+//	int32    work_var;
+//	uint16 range_para;
+//	
+//	if((range == AI_RANGE_USER)||(range == AI_RANGE_CUSTOMER_SENSOR))
+//		range_para = 500;
+//	else if((range == AI_RANGE_USER_10V)||(range == AI_RANGE_CUSTOMER_SENSOR_10V))
+//		range_para = 1000;
+//	work_var = ((int16)read_eeprom(id + (index<<1) + 1)<<8) + read_eeprom(id + (index<<1));		  
+
+//	if ( count >= 1023)
+//	{
+//		val =  work_var;
+//		return ( val );		
+//	}
+//	index = count*10/range_para;
+//	if(slope)
+//	{
+//		work_var = ((int32)read_eeprom(id +((index + 1)<<1) + 1)<<8) + read_eeprom(id + ((index + 1)<<1));
+//		work_var -= ((int32)read_eeprom(id + (index<<1) + 1)<<8) + read_eeprom(id + (index<<1)); 	
+//		val = count*10;
+//		val = val - range_para*index;
+//		val = (val*work_var /range_para);
+//		val += ((int32)read_eeprom(id + (index<<1) + 1)<<8) + read_eeprom(id + (index << 1));
+//	}
+
+//	else
+//	{
+//	
+//		work_var = ((int32)read_eeprom(id +(index<<1) + 1)<<8) + read_eeprom(id + (index<<1));
+//	
+//		work_var -= ((int32)read_eeprom(id + ((index + 1)<<1) + 1)<<8) + read_eeprom(id + ((index + 1)<<1)); 
+//	 
+//	 	val = ((float)(index+1)*range_para - count*10)*work_var/range_para;
+//	  
+//		val += ((int32)read_eeprom(id + ((index + 1)<<1) + 1)<<8) + read_eeprom(id + ((index + 1) << 1));
+//	}
+
+//	return( (int16)val );
+//}
 
 
 int16 Filter(uint8 channel,signed input)
 {
 	// -------------FILTERING------------------
 //	int16 xdata siDelta;
-	int16 xdata siResult;
+	int32 xdata siResult;
 	uint8 xdata I;
-  int16 xdata siTemp;
+  int32 xdata siTemp;
 	I = channel;
 	siTemp = input;
   if(I == 10)
@@ -445,8 +640,11 @@ int16 Filter(uint8 channel,signed input)
 	}
 	else
 	{
-			siResult = (pre_mul_analog_input[I] * InputFilter(I) + siTemp) / (InputFilter(I) + 1);
-			pre_mul_analog_input[I] = siResult;
+			siResult = (pre_mul_analog_input[I] * InputFilter(I) + siTemp) *10 / (InputFilter(I) + 1);
+			if(siResult%10 >= 5)
+				siResult += 10;
+			pre_mul_analog_input[I] = siResult/10;// + InputFilter(I);
+			siResult /= 10;
 	}
 	return siResult;
 	
@@ -485,8 +683,8 @@ int16 look_up_table(uint16 count, int8 type)
 				else
 				{
 					val += index*100;
-					val = val - 400;
-					//val = 400 - val;
+					//val = val - 400;
+					val = 400 - val;
 					val = val | 0x8000;
 				}			 
 				return (val);
@@ -561,8 +759,8 @@ int16 look_up_table(uint16 count, int8 type)
 				else
 				{
 					val += index*100;
-					//val = 400 - val;//
-					val = val - 400;
+					val = 400 - val;//
+					//val = val - 400;
 					val = val | 0x8000;
 				}			 
 				return (val);
@@ -621,7 +819,16 @@ int16 RangeConverter(uint8 function, int16 para,uint8 i,int16 cal)
 		#ifdef TSTAT8_HUNTER
 		siResult = (int32)siInput*1200/1023;//(int32)siInput*879/1000;
 		#else
-		siResult = (int32)siInput*879/1000;
+		//if(HardwareVersion >= 5)
+		#ifdef ROLY
+			siResult = (int32)siInput*1200/1023;
+		#else
+		if((HardwareVersion < HW_VERSION_OVERSHOOT)&&(co2_present != 1))
+			siResult = (int32)siInput*879/1000;
+		else
+			siResult = (int32)siInput*1200/1023;
+		#endif
+			
 		#endif
 	}	
 	//-----------10K Thermistor---------------
@@ -849,12 +1056,36 @@ int16 RangeConverter(uint8 function, int16 para,uint8 i,int16 cal)
 	
 	//-----------Custom Sensor---------------
 	//else if(ucFunction == 4 && ucI < 3)
-	else if(ucFunction == AI_RANGE_USER)  //extend customer table to all channels
+	else if((ucFunction == AI_RANGE_USER)||(ucFunction == AI_RANGE_USER_10V))  //extend customer table to all channels
 		{
-		siResult = siInput;
+		if(ucFunction == AI_RANGE_USER)
+			siResult = siInput*518/1000;
+		else if(ucFunction == AI_RANGE_USER_10V)
+		{
+			#ifdef ROLY
+				siResult = (int32)siInput*1200/1023;
+			#else
+			if((HardwareVersion < HW_VERSION_OVERSHOOT)&&(co2_present != 1))
+				siResult = (int32)siInput*879/1000;
+			else
+				siResult = (int32)siInput*1200/1023;
+			#endif
+		}
+		
+		//	siResult = (int32)siInput*879/1000;
+		//siResult = siInput;
 		siResult *= InputVoltageTerm;
-		siResult /= 100;			
-		siAdcResult = look_up_customtable(EEP_TABLE1_ZERO ,siResult,slope_type[0]);
+		siResult /= 100;
+		if(ucFunction == AI_RANGE_USER)		
+			siAdcResult = look_up_customtable(0 ,siResult,slope_type[0],AI_RANGE_USER);
+		else if(ucFunction == AI_RANGE_USER_10V)
+			siAdcResult = look_up_customtable(0 ,siResult,slope_type[0],AI_RANGE_USER_10V);
+//		if(ucFunction == AI_RANGE_USER_10V)
+//		{
+//			siAdcResult *= 17;
+//			siAdcResult /= 10;
+//		}
+		
 //		if(table1_flag == ucI)
 //			siAdcResult = look_up_customtable(EEP_TABLE1_ZERO ,siInput,slope_type[0]);
 //		else
@@ -863,13 +1094,29 @@ int16 RangeConverter(uint8 function, int16 para,uint8 i,int16 cal)
 		siResult = siAdcResult + uiCal;// - CALIBRATION_OFFSET;
 		}
 
-	else if(ucFunction == AI_RANGE_CUSTOMER_SENSOR)  //extend customer table to all channels
+	else if((ucFunction == AI_RANGE_CUSTOMER_SENSOR)||(ucFunction == AI_RANGE_CUSTOMER_SENSOR_10V))  //extend customer table to all channels
 		{
-		siResult = siInput;
+		if(ucFunction == AI_RANGE_CUSTOMER_SENSOR)
+			siResult = siInput*518/1000;
+		else if(ucFunction == AI_RANGE_CUSTOMER_SENSOR_10V)
+		{
+			#ifdef ROLY
+				siResult = (int32)siInput*1200/1023;
+			#else			
+			if((HardwareVersion < HW_VERSION_OVERSHOOT)&&(co2_present != 1))
+				siResult = (int32)siInput*879/1000;
+			else
+				siResult = (int32)siInput*1200/1023;
+			#endif
+		}
+		//	siResult = (int32)siInput*879/1000;
 		siResult *= InputVoltageTerm;
 		siResult /= 100;
-		//siInput = siResult;	
-		siAdcResult = look_up_customtable(EEP_TABLE1_ZERO + 22,siResult,slope_type[1]);			 
+		//siInput = siResult;
+		if(ucFunction == AI_RANGE_CUSTOMER_SENSOR)		
+			siAdcResult = look_up_customtable(0,siResult,slope_type[1],AI_RANGE_CUSTOMER_SENSOR);
+		else if(ucFunction == AI_RANGE_CUSTOMER_SENSOR_10V)
+			siAdcResult = look_up_customtable(0,siResult,slope_type[1],AI_RANGE_CUSTOMER_SENSOR_10V);
 		siResult = siAdcResult + uiCal;// - CALIBRATION_OFFSET;
 		}
 		
@@ -878,11 +1125,12 @@ int16 RangeConverter(uint8 function, int16 para,uint8 i,int16 cal)
 		#ifdef TSTAT7_ARM
 		siResult = 0;// tstat7 not support 4-20mA range
 		#else			
-		siResult = (float)(siInput)* 0.49;
+		siResult = (float)siInput * 0.49;
 		#endif
-		if(siResult < 400)
+    if(siResult < 400)
 			siResult = 400;
 		siResult = get_4to20ma_value(siResult);
+		
 		
 		}	
 				
@@ -891,11 +1139,36 @@ int16 RangeConverter(uint8 function, int16 para,uint8 i,int16 cal)
 }
 
 
+int16 get_tem(uint8 num)
+{
+	int16 tem;
+	switch(num)
+	{
+		case PID_AI1:
+		case PID_AI2:	
+		case PID_AI3:
+		case PID_AI4:
+		case PID_AI5:
+		case PID_AI6:
+		case PID_AI7:
+		case PID_AI8:		
+			tem = mul_analog_input[num - PID_AI1];
+		break;
+		case PID_INTERNAL_TEMPERATURE:				
+			tem = temperature_internal;
+		break;
 
+		default:
+			tem = 0;
+		break;
+	}
+  return tem;
+}
 
 void CalTemperature(void)
 {
 	int16 tem_temp;
+	int16 delta_source1,delta_source2;
 	tem_temp = ADC_getChannal(ADC1, 15);
 	tem_temp = Trans_ADC(tem_temp);//temperature_internal * 1023 / 4095;	
 	tem_temp = Filter(10, tem_temp);
@@ -940,7 +1213,7 @@ void CalTemperature(void)
 			temperature = temperature_internal;// + internal_calibration;
 		
 		else if(EEP_TempSelect == TEMP_HUM_TEMPERATURE)  // use temperature of hum sensor
-			temperature = temperature_humsensor;
+			temperature = htu_temp + Hum_T_calibration;
 
 		else if(EEP_TempSelect == TEMP_AVERAGE_TEMPERATURE_INTERNAL_AI1) //select average value of internal sensor and AI1
 			temperature = (temperature_internal + mul_analog_input[0]) >> 1;//divided by 2,get the average
@@ -958,9 +1231,24 @@ void CalTemperature(void)
 			temperature = mul_analog_input[EEP_TempSelect - TEMP_AI1];
 		else if (EEP_TempSelect == TEM_COMPATIBLE_AI1)
 			temperature = mul_analog_input[0];
+		
+		else if(EEP_TempSelect == PID_DELTA_TEMPERATURE)
+		{
+			delta_source1 = get_tem(Delta_tem_source1);
+			delta_source2 = get_tem(Delta_tem_source2);
+			temperature = delta_source1 -  delta_source2;		
+		}
 
 		else
 			temperature = temperature_internal;
+		
+		if(EEP_Input1Select == PID_DELTA_TEMPERATURE)
+		{
+			delta_source1 = get_tem(Delta_tem_source1);
+			delta_source2 = get_tem(Delta_tem_source2);
+			delta_temperature = delta_source1 -  delta_source2;		
+		}
+		
 		
 		if ( temperature < MIN_TEMP )  //Clip to MIN/MAX in Deg C, always. 
 				temperature =	MIN_TEMP;
@@ -1146,10 +1434,12 @@ void CalInput(void)
 	uint32 pir_temp = 0;//[6] = {0,0,0,0,0,0};
 	uint16 adc_buf[20];
 	uint32 adc_sum;
+	static uint8 rs485_wrn_cnt = 0;
 //MAX_INPUT_CHANNEL
 	for(i=0;i<MAX_INPUT_CHANNEL;i++)//
 		{	
-    AI_MODE_OUT(1);			
+    AI_MODE_OUT(1);	
+		
 		if(GetByteBit(&EEP_InputManuEnable,i)) 
 			
 			mul_analog_input[i] = ((int16)ManualAI_HI(i) << 8) + ManualAI_LO(i);
@@ -1170,31 +1460,17 @@ void CalInput(void)
 			delay_ms(10);	
 //mul_analog_in_buffer[i] = ADC_getChannal(ADC1, 11);
 			adc_sum = 0;
+				/*
 			for(j=0;j<20;j++)
 			{				
 				adc_buf[j] = ADC_getChannal(ADC1, 11);
 				adc_sum += adc_buf[j];
         delay_us(200);
-			}
-//			m = 10;
-//			for(j=0;j<10;j++)
-//			{
-//				for(k=0;k<m;k++)
-//				{
-//					if(adc_buf[k] > adc_buf[k+1])
-//					{
-//						adc_buf[10] = adc_buf[k];
-//						adc_buf[k] = adc_buf[k+1];
-//						adc_buf[k+1] = adc_buf[10];
-//					}
-//					m--;
-//				}
-//			}
-//			
-//			for(j=1;j<9;j++)
-//			 adc_sum += adc_buf[j];		
-			
-			mul_analog_in_buffer[i] = adc_sum / 20;
+			}	 
+			mul_analog_in_buffer[i] = adc_sum / 20;	
+				*/
+				
+			mul_analog_in_buffer[i] = ADC_getChannal(ADC1, 11);
 			
 
 			#endif	
@@ -1207,21 +1483,18 @@ void CalInput(void)
 				;//mul_analog_input[i] = mul_analog_in_buffer[i];
 			else
 				mul_analog_in_buffer[i] = Filter(i,mul_analog_in_buffer[i]);
-			
-			
+
 			//cc extend customer table to all channels
-			if(AI_Range(i) == AI_RANGE_USER)//if range is set to customer sensor
-				{
+			if((AI_Range(i) == AI_RANGE_USER)||(AI_Range(i) == AI_RANGE_USER_10V))//if range is set to customer sensor
+			{
 				if(table1_flag < MAX_INPUT_CHANNEL)//AI1
 					table2_flag = i;
 				else
 					table1_flag = i;										
-				}
+			}
 			mul_analog_in_buffer[i] = RangeConverter(AI_Range(i),mul_analog_in_buffer[i],i,0);
+						
 			
-//			if(i==1)
-//				mul_analog_input[i] = pwmtest;
-//			else
 			mul_analog_input[i] = mul_analog_in_buffer[i] + mul_analog_cal[i];  
 			}	
 			//AI_MODE_OUT(0);
@@ -1229,29 +1502,76 @@ void CalInput(void)
 		}
 //     #ifdef TSTAT_CO2
 			aq_value = ADC_getChannal(ADC1, 10);			
-//		 #else
+
+		#ifdef TSTAT_CO2
+		if(hum_sensor_type == 0)
+		{
 			htu21d_trigger_measurement_no_hold_master(SEL_HUM);
 			delay_ms(20);
 			mul_analog_in_buffer[8] = read_hum_sensor(SEL_HUM);
-
+      //delay_ms(20);
+			htu21d_trigger_measurement_no_hold_master(SEL_TEMP);
+			delay_ms(50);		
+		  htu_temp = read_hum_sensor(SEL_TEMP);		
+		}	
+		
+		else
+		{
+			SHT3X_GetTempAndHumi(&tem_org, &hum_org, REPEATAB_HIGH, MODE_POLLING, 50);
+			htu_temp = tem_org;
+			mul_analog_in_buffer[8] = hum_org;
+		}
+		
+		#else
+		
+		if(hum_sensor_type == 1)
+		{
+			SHT3X_GetTempAndHumi(&tem_org, &hum_org, REPEATAB_HIGH, MODE_POLLING, 50);
+			htu_temp = tem_org;
+			mul_analog_in_buffer[8] = hum_org;
+		}
+		else
+		{
+			htu21d_trigger_measurement_no_hold_master(SEL_HUM);
+			delay_ms(20);
+			mul_analog_in_buffer[8] = read_hum_sensor(SEL_HUM);
+      //delay_ms(20);
 			htu21d_trigger_measurement_no_hold_master(SEL_TEMP);
 			delay_ms(50);		
 		  htu_temp = read_hum_sensor(SEL_TEMP);
-//		#endif //TSTAT_CO2
+		}
+		#endif
 		
 		if(hum_manual_enable == 0)	  //hum_manaul_disable
 			{
-//			#ifdef TSTAT_CO2
-//				humidity = Filter(8, hum_of_co2);
-//			#else		
+
 			if(HUM_Filter == 0)
 				org_humidity = mul_analog_in_buffer[8];
 			else
-				org_humidity = Filter(8, mul_analog_in_buffer[8]);
-						
-			humidity = CalculateTemperatureCompensation(org_humidity, htu_temp);
+				org_humidity = Filter(9, mul_analog_in_buffer[8]);
+			
+			#ifdef TSTAT_CO2
+			
+			co2_data =  Filter(8, co2_data_org);
+			co2_data = co2_data + co2_calibration_data;
+			if(co2_data < 400)
+				co2_data = 400;
+			
+			if(hum_sensor_type == 1)
+				humidity = org_humidity;
+			else
+				humidity = CalculateTemperatureCompensation(org_humidity, htu_temp);
+
+			#else	
+			if(HardwareVersion >= 6)
+				humidity = org_humidity;
+			else
+				humidity = CalculateTemperatureCompensation(org_humidity, htu_temp);
+			#endif
+			
 			humidity = humidity + humidity_calibration;
-//			#endif //TSTAT_CO2
+
+			
 			}
 		else
 			{
@@ -1281,7 +1601,23 @@ void CalInput(void)
 		ao1_fdbk = (uint32)ao1_fdbk * 909/4096;
 		ao2_fdbk = ADC_getChannal(ADC1, 4);				
 		ao2_fdbk = (uint32)ao2_fdbk * 909/4096;
-			
+		
+		rs485_p_voltage = ADC_getChannal(ADC1, 12)*14/1000; //(3*ADC_getChannal(ADC1, 12)/4096)*1000/53;
+		rs485_n_voltage = ADC_getChannal(ADC1, 13)*14/1000;;
+		if((rs485_p_voltage > 15)||(rs485_n_voltage > 15))//if voltage over 15V
+		{
+			if(rs485_wrn_cnt < 10)
+				rs485_wrn_cnt += 5;
+			if(rs485_wrn_cnt >= 10)
+			  voltage_overshoot = 1;
+		}
+		else
+		{
+			if(rs485_wrn_cnt > 0)
+				rs485_wrn_cnt--;
+			if(rs485_wrn_cnt == 0)
+				voltage_overshoot = 0;
+		}
 }
 
 uint16 Trans_ADC(uint16 adc_value)//translate ADC value from 12 bits to 10 bits

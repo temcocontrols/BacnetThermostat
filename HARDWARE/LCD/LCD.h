@@ -57,6 +57,8 @@ extern uint16 const rightdown[];
 extern uint16 const rightup[];
 extern uint16 const cmnct_send[]; 
 extern uint16 const cmnct_rcv[]; 
+extern uint16 const wifinocnnct[];
+extern uint16 const wificonnect[];
 
 typedef struct   
 {
@@ -77,7 +79,7 @@ void ClearScreen(unsigned int bColor);
 void disp_ch(uint8 form, uint16 x, uint16 y,uint8 value,uint16 dcolor,uint16 bgcolor);		
 void disp_icon(uint16 cp, uint16 pp, uint16 const *icon_name, uint16 x,uint16 y,uint16 dcolor, uint16 bgcolor);
 void disp_null_icon(uint16 cp, uint16 pp, uint16 const *icon_name, uint16 x,uint16 y,uint16 dcolor, uint16 bgcolor);
-//void disp_str(uint8 form, uint16 x,uint16 y,uint8 *str,uint16 dcolor,uint16 bgcolor);	
+void disp_str(uint8 form, uint16 x,uint16 y,uint8 *str,uint16 dcolor,uint16 bgcolor);	
 void display_SP(int16 setpoint);
 void display_fanspeed(int16 speed);
 void display_mode(void);
@@ -91,6 +93,7 @@ void clear_lines(void);
 //void display_clock_date(int8 item, int16 value);
 //void display_clock_time(int8 item, int16 value);
 void display_scroll(void);
+void scroll_warning(uint8 item);
 void display_schedule_time(int8 schedule_time_sel, uint8 hour_minute);
 void Top_area_display(uint8 item, int16 value, uint8 unit);
 

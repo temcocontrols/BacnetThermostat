@@ -29,6 +29,13 @@
 unsigned int short const baudrate[9]={96,192,384,576,1152,768,12,48,144};
 
 uint8 const poll_co2_cmd[9]={0xFF, 0x01, 0x86, 0x00,0x00,0x00,0x00,0x00,0X79};
+uint8 const  disable_co2_autocal_MHZ19B[9] = {0xff,0x01,0x79,0x00,0x00,0x00,0x00,0x00,0x86};
+uint8 const  enable_co2_autocal_MHZ19B[9] =  {0xff,0x01,0x79,0xa0,0x00,0x00,0x00,0x00,0xe6};
+uint8 const cal_co2_MHZ19B_zero[9] = 				{0xff,0x01,0x87,0x00,0x00,0x00,0x00,0x00,0x78};
+
+
+//uint8 const sensirion_co2_cmd_poll
+	
 
 uint8 const code tem_unit[2] = {'C','F'};
 
@@ -390,7 +397,7 @@ uint8 const code parameter_array[2][ TOTAL_EE_PARAMETERS - MAXEEPCONSTRANGE][2] 
 {
 		{
 		//    LOWER  UPPER
-		 {0 ,    20    }, //01 EEP_TEMP_SELECT //temperature sensor select,3 = average internal sensor and external sensor
+		 {0 ,    25    }, //01 EEP_TEMP_SELECT //temperature sensor select,3 = average internal sensor and external sensor
 		 {0 ,    100  }, //02 EEP_FILTER //temperature filter
 		 {0 ,    5    }, //03 EEP_ANALOG_IN1 //analog in 1
 		 {0 ,    5    }, //04 EEP_ANALOG_IN2 //analog in 2
@@ -422,7 +429,7 @@ uint8 const code parameter_array[2][ TOTAL_EE_PARAMETERS - MAXEEPCONSTRANGE][2] 
 		 {0,    255     }, // 30EEP_OUTPUT2_SCALE
 		 {0,    255   }, // EEP_MAX_SETPOINT //max setpoint
 		 {0,    255   }, // EEP_MIN_SETPOINT //min setpoint
-		 {0 ,    4    },  	//  EEP_SPECIAL_MENU_LOCK//3,user can not do anything from keypad,and only can do somthign from menu;4,part of menu items for gridpoint
+		 {0 ,    6    },  	//  EEP_SPECIAL_MENU_LOCK//3,user can not do anything from keypad,and only can do somthign from menu;4,part of menu items for gridpoint
 		 {0 ,    6    },	//  EEP_DISPLAY; 6,display nothing except menu mode		
  		 {10 ,    255 }, 	//35  EEP_VALVE_TRAVEL_TIME
 		 {0,	101	  },	//  EEP_RS485_MODERS //485
@@ -474,13 +481,13 @@ uint8 const code parameter_array[2][ TOTAL_EE_PARAMETERS - MAXEEPCONSTRANGE][2] 
 		 {0 ,    TOTAL_LED_CONTROL_STATES-1  }, // EEP_LED5_CONTROL
 		 {0 ,    TOTAL_LED_CONTROL_STATES-1  }, // EEP_LED6_CONTROL
 		 {0 ,    TOTAL_LED_CONTROL_STATES-1  }, // EEP_LED7_CONTROL
-         {0 ,   3     }, //EEP_PID_OUTPUT1 //select which PI to control the output.OUT1
-		 {0 ,   3     }, //EEP_PID_OUTPUT2 //OUT2
-		 {0 ,   3     }, //60EEP_PID_OUTPUT3 //OUT3
-		 {0 ,   3     }, //70EEP_PID_OUTPUT4 //OUT4
-		 {0 ,   3     }, //EEP_PID_OUTPUT5 //70 OUT5
-		 {0 ,   3     }, //EEP_PID_OUTPUT6 //OUT6
-		 {0 ,   3     }, //EEP_PID_OUTPUT7 //OUT7
+     {0 ,   5    }, //EEP_PID_OUTPUT1 //select which PI to control the output.OUT1
+		 {0 ,   5     }, //EEP_PID_OUTPUT2 //OUT2
+		 {0 ,   5     }, //60EEP_PID_OUTPUT3 //OUT3
+		 {0 ,   5     }, //70EEP_PID_OUTPUT4 //OUT4
+		 {0 ,   5     }, //EEP_PID_OUTPUT5 //70 OUT5
+		 {0 ,   5     }, //EEP_PID_OUTPUT6 //OUT6
+		 {0 ,   5     }, //EEP_PID_OUTPUT7 //OUT7
 		 {0 ,   3     }, //EEP_RANGE_OUTPUT1 //OUT1  ON/OFF PWM FLOATING
 		 {0 ,   3     }, //EEP_RANGE_OUTPUT2 //OUT2  ON/OFF PWM FLOATING
 		 {0 ,   3     }, //EEP_RANGE_OUTPUT3 //OUT3  ON/OFF PWM FLOATING
@@ -558,7 +565,7 @@ uint8 const code parameter_array[2][ TOTAL_EE_PARAMETERS - MAXEEPCONSTRANGE][2] 
 		} ,
 		{
 		//    LOWER  UPPER
-		 {0 ,    20    }, //01 EEP_TEMP_SELECT //temperature sensor select,3 = average internal sensor and external sensor
+		 {0 ,    25    }, //01 EEP_TEMP_SELECT //temperature sensor select,3 = average internal sensor and external sensor
 		 {0 ,    100  }, //02 EEP_FILTER //temperature filter
 		 {0 ,    5    }, //03 EEP_ANALOG_IN1 //analog in 1
 		 {0 ,    5    }, //04 EEP_ANALOG_IN2 //analog in 2
@@ -590,10 +597,10 @@ uint8 const code parameter_array[2][ TOTAL_EE_PARAMETERS - MAXEEPCONSTRANGE][2] 
 		 {0,    255   }, //30 EEP_OUTPUT2_SCALE
 		 {0,    255   },   	//  EEP_MAX_SETPOINT //max setpoint
 		 {0,    255   },   	//  EEP_MIN_SETPOINT //min setpoint
-		 {0 ,    4    } ,  	// EEP_SPECIAL_MENU_LOCK//3,user can not do anything from keypad,and only can do somthign from menu;4,part of menu items for gridpoint
+		 {0 ,    6    } ,  	// EEP_SPECIAL_MENU_LOCK//3,user can not do anything from keypad,and only can do somthign from menu;4,part of menu items for gridpoint
 		 {0 ,    6    },	// EEP_DISPLAY; 6,display nothing except menu mode		
  		 {10 ,    255 }, 	// EEP_VALVE_TRAVEL_TIME
-		 {0,	101	  },	// EEP_RS485_MODERS //485
+		 {0,	101	  },	// EEP_RS485_MODER //485
 		 {0,	2	  },  //EEP_DEMAND_RESPONSE //demand response
 		 {0,    99   },  //clock year
 		 {1,    12    },  //clock month
@@ -642,13 +649,13 @@ uint8 const code parameter_array[2][ TOTAL_EE_PARAMETERS - MAXEEPCONSTRANGE][2] 
 		 {0 ,    TOTAL_LED_CONTROL_STATES-1  }, // EEP_LED5_CONTROL
 		 {0 ,    TOTAL_LED_CONTROL_STATES-1  }, // EEP_LED6_CONTROL
 		 {0 ,    TOTAL_LED_CONTROL_STATES-1  }, // EEP_LED7_CONTROL
-         {0 ,   3     }, //EEP_PID_OUTPUT1 //select which PI to control the output.OUT1
-		 {0 ,   3     }, //EEP_PID_OUTPUT2 //OUT2
-		 {0 ,   3     }, //EEP_PID_OUTPUT3 //OUT3
-		 {0 ,   3     }, //70EEP_PID_OUTPUT4 //OUT4
-		 {0 ,   3     }, //EEP_PID_OUTPUT5 //70 OUT5
-		 {0 ,   3     }, //EEP_PID_OUTPUT6 //OUT6
-		 {0 ,   3     }, //EEP_PID_OUTPUT7 //OUT7
+     {0 ,   5     }, //EEP_PID_OUTPUT1 //select which PI to control the output.OUT1
+		 {0 ,   5     }, //EEP_PID_OUTPUT2 //OUT2
+		 {0 ,   5     }, //EEP_PID_OUTPUT3 //OUT3
+		 {0 ,   5     }, //70EEP_PID_OUTPUT4 //OUT4
+		 {0 ,   5     }, //EEP_PID_OUTPUT5 //70 OUT5
+		 {0 ,   5     }, //EEP_PID_OUTPUT6 //OUT6
+		 {0 ,   5     }, //EEP_PID_OUTPUT7 //OUT7
 		 {0 ,   3     }, //EEP_RANGE_OUTPUT1 //OUT1  ON/OFF PWM FLOATING
 		 {0 ,   3     }, //EEP_RANGE_OUTPUT2 //OUT2  ON/OFF PWM FLOATING
 		 {0 ,   3     }, //EEP_RANGE_OUTPUT3 //OUT3  ON/OFF PWM FLOATING
@@ -728,10 +735,10 @@ uint8 const code parameter_array[2][ TOTAL_EE_PARAMETERS - MAXEEPCONSTRANGE][2] 
 uint8 const code parameter_default[2][ TOTAL_EE_PARAMETERS - MAXEEPCONSTRANGE ] =
 {
  /*  1                                                                                                        10                     																								20			                                                                                                                30                                                                                                                                             40                                                   																									    50																																									60																																	  70																																   80																																											90																																																	100																																				110																																			120																																								      130																							*/
-	{2,/*TSS*/	DEFAULT_FILTER,/*FIL*/	 0,/*AI1*/	 0,/*AI2*/	  60,/*Ort*/ 100,/*dAC*/ 1,/*bau*/  0,/*dSC*/  0,/*dCH*/   60,/*CPr*/    50,/*CIn*/  1,/*SOP*/   0,/*HC*/	10,/*CDb*/ 10,/*HDb*/ 0,/*C_F*/  3,/*FAn*/  10,/*nHd*/ 10,/*nCd*/	190,/*nHSl*/ 0,/*nHSh*/   210,/*nCSl*/ 0x00/*nCSh*/,    0,/*APP*/  20,/*POS*/ 2,/*POn*/  1,/*PAD*/  0,/*AUT*/  1,/*OU1*/   1,/*OU2*/	 50,/*MaxS*/   15,/*MinS*/   	0,/*LOC*/   0,/*dIS*/  90,/*Vtt*/    COMMUNICATION_MODE,/*RS485*/	  0,/*DEMAND*/ 0,0,0,0,0,0,0,/*clock*/  0,0,0,0,0,0,0,0,/*schedule*/    0,/*DEF*/     0,/*FAC*/    210,/*DCSL*/    0,/*DCSH*/     190,/*DHSL*/   0,/*DHSH*/      200,/*NSl*/     0,/*NSh*/      0,/*FAS */  3,/*PID3HSTG*/ 3,/*PID3cSTG*/
+	{2,/*TSS*/	DEFAULT_FILTER,/*FIL*/	 0,/*AI1*/	 0,/*AI2*/	  60,/*Ort*/ 100,/*dAC*/ 1,/*bau*/  1,/*dSC*/  0,/*dCH*/   60,/*CPr*/    50,/*CIn*/  1,/*SOP*/   0,/*HC*/	10,/*CDb*/ 10,/*HDb*/ 0,/*C_F*/  3,/*FAn*/  10,/*nHd*/ 10,/*nCd*/	190,/*nHSl*/ 0,/*nHSh*/   210,/*nCSl*/ 0x00/*nCSh*/,    0,/*APP*/  20,/*POS*/ 2,/*POn*/  1,/*PAD*/  0,/*AUT*/  1,/*OU1*/   1,/*OU2*/	 50,/*MaxS*/   15,/*MinS*/   	0,/*LOC*/   0,/*dIS*/  90,/*Vtt*/    COMMUNICATION_MODE,/*RS485*/	  0,/*DEMAND*/ 0,0,0,0,0,0,0,/*clock*/  0,0,0,0,0,0,0,0,/*schedule*/    0,/*DEF*/     0,/*FAC*/    210,/*DCSL*/    0,/*DCSH*/     190,/*DHSL*/   0,/*DHSH*/      200,/*NSl*/     0,/*NSh*/      0,/*FAS */  3,/*PID3HSTG*/ 3,/*PID3cSTG*/
 	3,/*UHSTG*/ 		3,/*UCSTG*/  	3,/*HOT*/		    3,/*COT*/  	 3,/*InTYPE*/         0xe8,/*PLO*/   	0x03,/*PHI*/    0x0a,/*ILO*/     0,/*IHI*/     0xd0,/*uSLO*/   0x07,/*uSHI*/   0xb8,/*uNSLO*/    0x0b,/*uNSHI*/      3,/*LD1*/    2,/*LD2*/    1,/*LD3*/  15,/*LD4*/  23,/*LD5*/  24,/*LD6*/  19,/*LD7*/   0,/*PIO1*/ 	   0,/*PIO2*/     	0,/*PIO3*/ 	  0,/*PIO4*/    0,/*PIO5*/    0,/*PIO6*/    0,/*PIO7*/     0,/*O1*/ 0,/*O2*/ 0,/*O3*/ 0,/*O4*/ 0,/*O5*/ 				  0,/*ItLkO1*/ 0,/*ItLkO2*/ 0,/*ItLkO3*/ 0,/*ItLkO4*/ 0,/*ItLkO5*/ 0,/*ItLkO6*/ 0,/*ItLkO7*/  10,/*SP_INCRESE*/          5,/*freezeSP*/       10,/*delayON*/       30,/*delayOFF*/    		0,/*AI1*/  0,/*AI2*/     0,/*timer_onH*/         0,/*timer_onL*/		0,/*timer_offH*/          0,/*timer_offL*/			1,/*MINidL*/           0,/*MINidH*/	     254,/*MAXidL*/	  0,/*MAXidH*/	 0,/*units*/		0,/*MANUAL_AI*/      0,/*MANUAL_INTERNAL*/     0,/*OUen*/	   0,/*BASE*/	0,	/*DeadM*/   1,/*round*/	  0,/*con*/   0,/*TS*/ 	 0,/*OF1*/	0,/*OF2*/	0,/*OF3*/	0,/*OF4*/	0,/*OF5*/	 20,/*defSP*/	0,/*ConReg*/	   0,/*Pir*/	0,/*SysF*/    	  0,/*AO1RNG*/ 0,/*AO2RNG*/ 0,/*AO3RNG*/	0,/*AO4RNG*/	0,/*AO5RNG*/	0,/*AO6RNG*/	0,/*AO7RNG*/	0,/*AO8RNG*/		255,/*LCDO/F*/	   	0,/*FRC*/	 0,/*LOCK*/    100,/*CUSTOM*/	   1,/*LCD1*/	 0,/*LCD2*/	  0,/*SUN*/  0,/*MOON*/   1/*DSPT*/, 1,/*mode*/ 
 	DEFAULT_FILTER,/*IN1_filter*/ DEFAULT_FILTER,/*IN2_filter*/ DEFAULT_FILTER,/*IN3_filter*/ DEFAULT_FILTER,/*IN4_filter*/ DEFAULT_FILTER,/*IN5_filter*/ DEFAULT_FILTER,/*IN6_filter*/ DEFAULT_FILTER,/*IN7_filter*/ DEFAULT_FILTER,/*IN8_filter*/ DEFAULT_FILTER,/*CO2_filter*/ DEFAULT_FILTER,/*HUm_filter*/ 0,/*co2_cal_l*/ 0/*co2_cal_h*/},  // deg C 
-	{2,/*TSS*/	DEFAULT_FILTER,/*FIL*/	 0,/*AI1*/	 0,/*AI2*/	  60,/*Ort*/ 100,/*dAC*/ 4,/*bau*/  0,/*dSC*/  0,/*dCH*/   60,/*CPr*/    50,/*CIn*/  1,/*SOP*/   0,/*HC*/	10,/*CDb*/ 10,/*HDb*/ 1,/*C_F*/  3,/*FAn*/  10,/*nHd*/ 10,/*nCd*/	0x96,/*nHSl*/0x02,/*nHSh*/0xba,/*nCSl*/ 0x02/*nCSh*/,    0,/*APP*/  68,/*POS*/ 2,/*POn*/  1,/*PAD*/  0,/*AUT*/  1,/*OU1*/   1,/*OU2*/	 99,/*MaxS*/   55,/*MinS*/   	0,/*LOC*/   0,/*dIS*/  90,/*Vtt*/    COMMUNICATION_MODE,/*RS485*/	  0,/*DEMAND*/ 0,0,0,0,0,0,0,/*clock*/  0,0,0,0,0,0,0,0,/*schedule*/    0,/*DEF*/     0,/*FAC*/    0xba,/*DCSL*/   2,/*DCSH*/     0x96,/*DHSL*/  2,/*DHSH*/      0Xa8,/*NSl*/    2,/*NSh*/      0,/*FAS */  3,/*PID3HSTG*/ 3,/*PID3cSTG*/
+	{2,/*TSS*/	DEFAULT_FILTER,/*FIL*/	 0,/*AI1*/	 0,/*AI2*/	  60,/*Ort*/ 100,/*dAC*/ 4,/*bau*/  1,/*dSC*/  0,/*dCH*/   60,/*CPr*/    50,/*CIn*/  1,/*SOP*/   0,/*HC*/	10,/*CDb*/ 10,/*HDb*/ 1,/*C_F*/  3,/*FAn*/  10,/*nHd*/ 10,/*nCd*/	0x96,/*nHSl*/0x02,/*nHSh*/0xba,/*nCSl*/ 0x02/*nCSh*/,    0,/*APP*/  68,/*POS*/ 2,/*POn*/  1,/*PAD*/  0,/*AUT*/  1,/*OU1*/   1,/*OU2*/	 99,/*MaxS*/   55,/*MinS*/   	0,/*LOC*/   0,/*dIS*/  90,/*Vtt*/    COMMUNICATION_MODE,/*RS485*/	  0,/*DEMAND*/ 0,0,0,0,0,0,0,/*clock*/  0,0,0,0,0,0,0,0,/*schedule*/    0,/*DEF*/     0,/*FAC*/    0xba,/*DCSL*/   2,/*DCSH*/     0x96,/*DHSL*/  2,/*DHSH*/      0Xa8,/*NSl*/    2,/*NSh*/      0,/*FAS */  3,/*PID3HSTG*/ 3,/*PID3cSTG*/
     3,/*UHSTG*/  	    3,/*UCSTG*/  	3,/*HOT*/		    3,/*COT*/  	 3,/*InTYPE*/         0xe8,/*PLO*/   	0x03,/*PHI*/    0x0a,/*ILO*/     0,/*IHI*/     0xd0,/*uSLO*/   0x07,/*uSHI*/   0xb8,/*uNSLO*/    0x0b,/*uNSHI*/      3,/*LD1*/    2,/*LD2*/    1,/*LD3*/  15,/*LD4*/  23,/*LD5*/  24,/*LD6*/  19,/*LD7*/   0,/*PIO1*/ 	   0,/*PIO2*/    	0,/*PIO3*/ 	  0,/*PIO4*/    0,/*PIO5*/    0,/*PIO6*/    0,/*PIO7*/     0,/*O1*/ 0,/*O2*/ 0,/*O3*/ 0,/*O4*/ 0,/*O5*/ 				  0,/*ItLkO1*/ 0,/*ItLkO2*/ 0,/*ItLkO3*/ 0,/*ItLkO4*/ 0,/*ItLkO5*/ 0,/*ItLkO6*/ 0,/*ItLkO7*/  10,/*SP_INCRESE*/          40,/*freezeSP*/      10,/*delayON*/       30,/*delayOFF*/    		0,/*AI1*/  0,/*AI2*/     0,/*timer_onH*/         0,/*timer_onL*/		0,/*timer_offH*/          0,/*timer_offL*/			1,/*MINidL*/           0,/*MINidH*/	     254,/*MAXidL*/	  0,/*MAXidH*/	 0,/*units*/		0,/*MANUAL_AI*/      0,/*MANUAL_INTERNAL*/     0,/*OUen*/	   0,/*BASE*/	0,	/*DeadM*/   1,/*round*/	  0,/*con*/   0,/*TS*/	 0,/*OF1*/	0,/*OF2*/	0,/*OF3*/	0,/*OF4*/	0,/*OF5*/	 68,/*defSP*/	0,/*ConReg*/	   0,/*Pir*/	0,/*SysF*/    	  0,/*AO1RNG*/ 0,/*AO2RNG*/ 0,/*AO3RNG*/	0,/*AO4RNG*/	0,/*AO5RNG*/	0,/*AO6RNG*/	0,/*AO7RNG*/	0,/*AO8RNG*/		255,/*LCDO/F*/	  	0,/*FRC*/	 0,/*LOCK*/    100,/*CUSTOM*/	   1,/*LCD1*/	 0,/*LCD2*/	  0,/*SUN*/  0,/*MOON*/   1/*DSPT*/, 1,/*mode*/
 	DEFAULT_FILTER,/*IN1_filter*/ DEFAULT_FILTER,/*IN2_filter*/ DEFAULT_FILTER,/*IN3_filter*/ DEFAULT_FILTER,/*IN4_filter*/ DEFAULT_FILTER,/*IN5_filter*/ DEFAULT_FILTER,/*IN6_filter*/ DEFAULT_FILTER,/*IN7_filter*/ DEFAULT_FILTER,/*IN8_filter*/ DEFAULT_FILTER,/*CO2_filter*/ DEFAULT_FILTER,/*HUm_filter*/ 0,/*co2_cal_l*/ 0/*co2_cal_h*/}, // deg F
 

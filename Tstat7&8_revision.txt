@@ -1,0 +1,234 @@
+rev9_1
+add baudrate 76800 ,1200, 4800 and 14400 to BACNET AVS, make them be writeable.
+
+rev9_0
+fixed when changing AV5 Schedule.present value from 0 to 1, override time AV14 change to 60.
+
+rev8_9
+fixed when switch protocol from bacnet to modbus, value is not save in EEPROM bug.
+
+rev8_8
+fixed when intialize RTC. sometimes it shows "ini fail" by wrong.
+
+rev8_7
+add co2 calibration offset  and background calibration on/off command
+rev86
+add bacnet  instance write function for modbus
+rev8_5
+add Delta T logic for temperature input ;
+ add two resigters 802 and 803 to select delta temperature  source
+modify negative icon for top temperature displaying.
+fixed relay pwm output percentage 2
+
+rev 8_4
+fix bacnet AV12 system mode value and display bug.
+fix input 4-20mA range when current is over 17mA, data over flow issue. 
+
+rev8_3
+fix when use register 101 & 691 to change the cool/heat mode, it will write wrong value to register 113(cool/heat config)
+ rev8_2
+ fixed cycle delay and change over delay 
+ modify co2 filter, before it dose not work.
+ modify complier level to solve rev3 relays problem(relay4 will be on when power up and relay1 to 3 can not be controled)
+ add new register 693 to clear all eeprom except serial number and ID and set to factory default settings.
+
+ rev8_1
+ T7: fixed fan mode when press decrese key, it not go to off mode
+ T7: fixed cool/heat mode when switch mode the display always show heat.
+ redefine keypad function for fan mode setpoint and sys mode
+ left key: selec items up way
+ right key: select items down way
+ up and down key: adjust current selected item.
+
+ rev8_0
+ add new humidity sensor sht3x
+ rec 7_9
+ 1.add ptransfer function so can read/write registers under MSTP protocol by T3000.
+ rev7_8
+ tstat7 fixed canot read temperature from hum sensor bug
+
+ rev7_7
+1.	When input range set to 4-20mA, customer table1 and customer2, send data in float mode for bacnet
+2.	Fixed when using priority to change analog outputs, the value in register not change bug.
+3.	Fixed when using customer table2, 2.5V and 3V point do not save properly issue.  
+
+ rev7_6
+ fix when deadmaster is set, after power off to on, the timer is not initialized bug.
+  rev7_5
+  for tstst7:
+  change refresh outputs task to 50ms peroid
+  add ID check before deal with serial data to make system faster, when too many polling data on the bus, this can save time.
+
+ rev7_4
+ fixed Tstat7 keypad no response bug. the inputs initial routine is overflow.
+
+ rev7_3
+ modify register209 write operation, before it also store in other 5 place, now just store in one position and if current data is equal to last one, do not change it to reduce the dual with time.
+
+ rev7_2
+ add  protect function for modbus  command, if last read/write command is not done, do not receive new command to avoid receive buffer been changed by wrong.  
+ add debug code to count how many times it receive change ID command and store the last commad to EEPROM 
+ modify schedule so can match for yabe and T3000
+ add time synchronization 
+
+ rev71
+ fixed icon control when only set one of heat or cool icon relative with output, another one will not work at normal state.
+ add color indicator for Vicente
+
+ rev7_0
+ modify 10V input formular, previous it can not up to 10V.
+
+ rev6_9 add customer table 0-10V range
+ REV6_8
+ fixed instance number for bacnet protocol, before only take low 16 bits of serial number as default value.
+ fixed clock function for AI, and for occupancy sensor function, when singal is on, it will trigger override timer.  
+ REV6_7
+ add voltage check function for rs485 lins
+ remap GPIO pins for AI
+ rev6_6
+ fixed occupancy sensor function for AI, before only AI1 and AI2 can work.
+ add priority array for AO and BO 
+ rev 6_5
+ add float value for temperature humidity and setpoint for bacnet
+ rev6_4 test version.
+ rev6_3 fix after change protocol from modbus to bacnet, the object name not initial problem.
+ rev6_2 modify Tstat7 when it is in coast mode, stop the fan blade.
+ rev6_1 fixed after update firmware, ID and serial number not read right problem.
+ rev6_0
+ store modbus ID and serial number in flash, not in the eeprom 
+
+ rev5_6
+ 2017-11-22
+ add icon output control function: reg783 to reg791,all 9 icons:day,night,occ,unocc,heat,cool,fanspeed1,fanspeed2,fanspeed3
+ reduce the send/receive icon hold time.
+ change the sun/moon icons make them clear.
+ modify sun/moon icon for hotel and office mode 
+
+
+ rev5_5 
+ fixed RTC single write bug.
+ fixed analog input function, value 2: occupancy sensor, before it dose not work.
+
+ rev5_4
+ fixed clock time multiple write fucntion, before it is not standar modbus command
+ modify clock year value write command, compatible with Tstat6, for example, if write 2017, just write 17 to the register, before need write 2017.
+
+
+ rev 5_3
+ modify code to compatible with hardware rev3 and hardware rev4, now only one hex file.
+
+ rev5_2
+ 2017-07-20 using new bacnet librery rev10, fixed when send write command by yabe software, unit response abort message. reason: BACNET_MAX_PRIORITY must set to 16
+ 2017-07-18  modify on/off input, only support dry contact, not support voltage on/off range
+
+ rev5_1
+ add communication icon
+ add bacnet schedule
+
+
+ rev5_0
+ Tstat7 add baudrate select option on advanced keypad menu
+ fixed when set to factory default, the degree value not initial well bug.
+
+ rev4_9
+ using new bacnet lib rev8
+
+ rev4_8
+ tstat7 modify occ/unocc button, before it dose not work well
+ bacnet station number can not be more than 50, bacnet library need to be fixed.temperary set it to 50 for this version.
+
+ rev 4_5
+ add communication icon on the left up of LCD
+ modify BACNT staion number the same as modbus ID
+ modify schedule: 
+ ---add away mode, using 2 bytes and 2 regs to store mode flag  
+ ---add away setpoint, change setpoint librery
+ REV4_4 
+ add free cooling function
+
+ rev4_3 
+ fixed 2-10V output not correct issue, the offset value is for Tstat6 hardware, not suit for tstat8,change 177 to 200.
+ rev4_2
+ 2017-02-20
+ fixed customer unit write problem
+ 2017-0214
+ fixed transducer mode, and relay1 is indicating occupied/unoccupied
+ fixed internal temperature sensor register, it will show internal sensor value when set pid loop1 to other inputs.  
+ rev4_1
+ 2017-02-07
+ add 50K thermistor table for Chen
+ fixed menu part lock function and auto only function
+ rev4_0
+ 2017-01-19
+ fixed when temperature is bigger than 100C, the decimel point color is wrong.
+ fixed manual temperature function, and dose not store the value in EEPROM if use write frequently, it may be damaged soon.
+ use new fan icons.
+ rev3_9
+ 2017-01-18
+ adjust the display order for baudrate select
+ fixed degree C/F icon for the top unit degree.
+ fixed when use serial command to change the heat/cool mode, "SYS" icon dose't change err. 
+ 2017-01-17
+ fixed when write current degree with the same degree, it still do the converter math bug.
+ fixed output1 function can not be read/write problem, because it has the same low byte with scan command.
+ fix if schedule is off, when change the fan mode by serial command, icon and setpoint not show right problem
+
+ rev3_8 change LCD color and icons
+ fixed pid3 table math in control logic routine. 
+
+ REV3_7
+ fixed override time saving problem
+ add pir function, adjust pir judge threshold and add pir sensetivity register  
+ add show ID command
+
+ rev 3_4 fix negative temperture bug
+ add new schedule 
+ fixed scroll display problem, when AI1 and AI8 are not set the the first items, the value will in wrong order.
+ fixed look up table problem, not it can show negative temperature normally.
+
+ rev3_3
+ fix srand/rand routine error
+ add reset command to reset zigbee module after serial communication failure 1 minute 
+
+ rev2_6
+ cc 2016
+
+ rev2_5
+ cc 2016-04-21 fixed bug when set one cool or one heat stage, when pid result over 50%, it go to coast stage by wrong.	(pid library has been changed, OutputValue() routine modified)
+
+
+ REV 2_4
+ 2016-3-31
+ cc modify change baudrate function, in dealwith data routine, set a flag and response the command, then switch baudrate outside, so T3000 know if tstat accept this command
+ cc fix a bug that fan auto table can not be changed.
+
+ 2016-3-17 cc 
+ ---modify baudrate keypad select, after change the baudrate by keypad, system dose not restart.
+ ---modify bacnet library rev2 
+
+ REV 2_3
+ 2016-03-11 cc ---modify dealwithTag, make it logger, so do not response serial command too fast, otherwise minipannel will receive wrong values
+ 							---when initial tstat8 name, write all 20 charactors
+
+
+ REV 2_2
+ 2016-03-09 cc modify control logic routine, use ram variables instead of read_eeprom(), during task switch, read_eeprom() function sometimes return wrong value, so 
+ 	 outputs will be wrong 
+
+ REV2_1
+ CC fixed digital output, add relay switch time to softtimer routine 
+
+ REV 1
+ cc 07-07-2015
+ add firmware version
+
+
+
+
+
+
+
+
+
+
+
