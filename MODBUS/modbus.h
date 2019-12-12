@@ -98,8 +98,6 @@ enum {
 
 
 
-
-
 	COOLHEATMODE=101,//				// -	-	Heating or cooling mode in effect	0 = coasting, 1 = cooling, 2 = heating
 	PID1_MODE_OPERATION,//				// -	-	Current state of Tstat.  High heat -> coasting -> high cool.
 	SEQUENCE,//					// 0	2	Sequence of operation , tstat behaves differently according to sequence
