@@ -7850,7 +7850,7 @@ void write_wifi_data_by_block(uint16 StartAdd,uint8 HeadLen,uint8 *pData,uint8 t
 		Flash_Write_Mass();
 		//if(SSID_Info.MANUEL_EN != 0)
 //		{
-////			Restore_WIFI();
+			Restore_WIFI();
 //			if(type == WIFI)
 //			{// response first, then reboot
 //				//delay_ms(1000);
