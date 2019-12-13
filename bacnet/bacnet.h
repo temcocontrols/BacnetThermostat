@@ -8,9 +8,11 @@
 
 #define BAC_MSTP 	0
 #define BAC_IP 		1
-#define BAC_GSM 	2
+#define BAC_IP_CLIENT 2
 #define MODBUS   	3
 
+#define ARM_TSTAT_WIFI  1
+#define BIP  1
 
 
 /* Enable the Gateway (Routing) functionality here, if desired. */
@@ -133,13 +135,13 @@
 #include "address.h"
 #include "client.h"
 
-#define MAX_SCHEDULES_PER_WEEK  7
-#define MAX_INTERVALS_PER_DAY	 4
+#define MAX_SCHEDULES_PER_WEEK  8
+#define MAX_INTERVALS_PER_DAY	 6
 
 
 #define MAX_AVS  20
 
-#define MAX_AIS  10
+#define MAX_AIS  11
 
 #define MAX_AOS  2
 
@@ -225,12 +227,12 @@ void UART_Init(U8_T port);
 
 void uart1_init(u32 bound);
 
-#ifdef BIP
-#include "bip.h"
-//#include "tcpip.h" 
-#define BBMD_ENABLED 1
-#define BACDL_BIP
-#endif
+	#ifdef BIP
+	#include "bip.h"
+	//#include "tcpip.h" 
+	#define BBMD_ENABLED 1
+	#define BACDL_BIP
+	#endif
 
 #define far  
 #define xdata 
@@ -251,7 +253,7 @@ extern bool Send_bip_Flag;
 
 u8 	UART_Get_SendCount(void);
 
-#endif //BIP
+#endif 
 
 void Set_TXEN(U8_T dir);
 
@@ -277,7 +279,8 @@ BACNET_TIME_VALUE Get_Time_Value(uint8_t object_index,uint8_t day,uint8_t i);
 uint8_t Get_TV_count(uint8_t object_index,uint8_t day);
 BACNET_DEVICE_OBJECT_PROPERTY_REFERENCE * Get_Object_Property_References(uint8_t i);
 
-void write_Time_Value(uint8_t index,uint8_t day,uint8_t i,uint8_t , uint8_t /*BACNET_TIME_VALUE time_value*/);
+//void write_Time_Value(uint8_t index,uint8_t day,uint8_t i,uint8_t , uint8_t /*BACNET_TIME_VALUE time_value*/);
+void write_Time_Value(uint8_t index,uint8_t day,uint8_t i,uint8_t hour,uint8_t min/*BACNET_TIME_VALUE time_value*/,uint8_t value);
 #endif
 
 #if BAC_CALENDAR
@@ -295,7 +298,15 @@ void write_bacnet_description_to_buf(uint8_t type,uint8_t priority,uint8_t i,cha
 void write_bacent_AM_to_buf(uint8_t type,uint8_t i,uint8_t am);
 void Set_Object_Name(char * name);
 
+int Get_Number_by_Bacnet_Index(U8_T type,U8_T index);
+int Get_Bacnet_Index_by_Number(U8_T type,U8_T number);
 void Send_whois_to_mstp(void);
+void Count_IN_Object_Number(void);
+void Count_OUT_Object_Number(void);
+void Count_VAR_Object_Number(void);
+
+
+
 
 typedef enum
 {
@@ -312,7 +323,9 @@ extern uint8_t MSTP_Transfer_Len;
 extern uint8_t far MSTP_Rec_buffer[MAX_PDU];
 extern uint8_t MSTP_Write_OK;
 extern uint8_t MSTP_Transfer_OK;
+extern uint8_t MSTP_Transfer_Len;
 extern uint8_t remote_panel_num;
+extern U8_T flag_mstp_source;
 
 U8_T Get_current_panel(void);
 void chech_mstp_collision(void);
@@ -321,6 +334,9 @@ void check_mstp_timeout(void);
 
 void Send_SUB_I_Am(uint8_t index);
 void add_remote_panel_db(uint32_t device_id,BACNET_ADDRESS* src,uint8_t panel,uint8_t protocal);
+
+void Transfer_Bip_To_Mstp_pdu( uint8_t * pdu,uint16_t pdu_len);
+void Transfer_Mstp_To_Bip_pdu( uint8_t src, uint8_t * pdu,uint16_t pdu_len);
 
 void Tansfer_Mstp_pdu( uint8_t * pdu,uint16_t pdu_len);
 void push_bac_buf(U8_T *mtu,U8_T len);
@@ -352,6 +368,15 @@ extern uint8_t  AIS;
 extern uint8_t  AOS;
 extern uint8_t  BIS;
 extern uint8_t  BOS;
+extern uint8_t  BVS;
+extern uint8_t  TemcoVars;
+extern uint8_t  MSVS;
+extern uint8_t AI_Index_To_Instance[1];
+extern uint8_t BI_Index_To_Instance[1];
+extern uint8_t AO_Index_To_Instance[1];
+extern uint8_t BO_Index_To_Instance[1];
+extern uint8_t AV_Index_To_Instance[1];
+extern uint8_t BV_Index_To_Instance[1];
 		
 #if BAC_SCHEDULE
 extern uint8_t  SCHEDULES;
@@ -373,8 +398,8 @@ typedef struct
 }	Point;
 
 #define MAX_AR                  1
-#define MAX_WR                  1 // -> 16
-#define MAX_SCHEDULES_PER_WEEK  7
+#define MAX_WR                  2 // -> 16
+//#define MAX_SCHEDULES_PER_WEEK  8
 #define AR_DATES_SIZE          46
 
 
@@ -435,13 +460,23 @@ typedef struct
 
 extern U8_T ar_dates[MAX_AR][AR_DATES_SIZE];	
 
+extern float output_priority[MAX_OUTS][16]; 
+extern uint8 piority_flag;
+
+void Check_All_WR(void);
+
+void chech_mstp_collosion(void);
 
 
-
-
-
-
-
+void check_mstp_packet_error(void);
+void check_mstp_timeout(void);
+u32 Rtc_Set(u16 syear, u8 smon, u8 sday, u8 hour, u8 min, u8 sec, u8 flag);
+extern BACNET_DATE Local_Date;
+extern BACNET_TIME Local_Time;
+extern uint8 far wr_time_on_off[MAX_WR][MAX_SCHEDULES_PER_WEEK][6];
+uint8 get_schedule_flag(uint8 day, uint8 event);
+uint8 get_current_event_flag(uint8 day, uint8 event);
+extern bool Send_I_Am_Flag;
 #endif
 
 

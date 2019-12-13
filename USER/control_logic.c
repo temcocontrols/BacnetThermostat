@@ -11,23 +11,24 @@
 #include "24cxx.h"
 #include "inputs.h"
 #include "rtc.h"
-//#include "task.h"
+#include "delay.h"
+#include "bacnet.h"
 
 //uint8 OUTPUT_1TO5;
 uint8 pwm1_percent[2];
 uint8 pid_ctrl_bit[7];
-extern int16 ctest[10];
+//extern int16 ctest[10];
 extern void vStateSwitch( void *pvParameters );
-extern void vCoolingLockOut( void *pvParameters );
-extern void vHeatingLockOut( void *pvParameters );
+//extern void vCoolingLockOut( void *pvParameters );
+//extern void vHeatingLockOut( void *pvParameters );
 uint8 stateswitchflag = 0;
 uint8	init_delay_flag = 0;
 uint16 xdata HEATING_LOCKOUT;
 uint16 xdata COOLING_LOCKOUT;
 uint8 xdata heating_lockout_time[3];
 uint8 xdata cooling_lockout_time[3];
-uint8 xdata heating_lock_10s_counter = 0;
-uint8 xdata cooling_lock_10s_counter = 0;
+uint8 xdata heating_lock_10s_counter[3] = {0,0,0};
+uint8 xdata cooling_lock_10s_counter[3] = {0,0,0};
 uint16 xdata STATE_LOCK = 0;
 uint16 idata   COOLING_MODE = 0;
 uint16 idata   HEATING_MODE = 0;
@@ -239,8 +240,7 @@ void  TimerSwitch(uint8 times)
 		for(i=0;i<times;i++)
 		{
 			temp_bit = CompareTime(i + 1);
-//			if(i==0)
-//			ctest[6] = temp_bit;
+
 			if(temp_bit == 1 && timer_switch_status[i] == 0)
 			{
 				if(EEP_TimerSelect == 3)
@@ -252,7 +252,7 @@ void  TimerSwitch(uint8 times)
 				}
 				else
 				{
-	   				time_counter = (EEP_TimerOnHi << 8) + EEP_TimerOn;
+	   			time_counter = (EEP_TimerOnHi << 8) + EEP_TimerOn;
 					timer_switch_status[i] = 1;
 					CalDesireTime(time_counter,EEP_TimerUnits,1);
 				}
@@ -286,8 +286,7 @@ void  TimerSwitch(uint8 times)
 					else
 					{
 						timer_switch_status[i] = 0;
-//						if(i == 0)
-//							ctest[7]++;
+
 						CalDesireTime(giPwmTimeOff[i],0,i + 1);
 						//mode_stage_changed[i] = 1;
 					}
@@ -779,7 +778,7 @@ void mode_operation( uint8 temp_pi )
 				}
 			
 			}
-//		ctest[4] = intended_mode_of_operation[0];	
+
 		switch ( intended_mode_of_operation[temp_pi] ) 
 			{	
 				case DAYTIME_COOLING1 :
@@ -788,16 +787,12 @@ void mode_operation( uint8 temp_pi )
 							set_bit(&DELAY_FLAG,temp_pi,0);
 							//current_mode_of_operation[temp_pi] = DAYTIME_COOLING1 ;
 							JudgeDecrease(current_mode_of_operation[temp_pi],DAYTIME_COOLING1,temp_pi);
-							#ifdef PIDMODETEST
-//							if(temp_pi == 0)
-//							ctestpid = 1;
-							#endif
+
 						}	
 					else
 						{
 							SetDelayFlag(temp_pi,1);
-//							if(temp_pi == 0)
-//							ctestpid = 111;
+
 						}	
 				break;
 
@@ -1044,14 +1039,14 @@ SetDelayFlag(temp_pi,1);
 				{
 					set_bit(&COOLING_LOCKOUT,temp_pi,1) ; //cooling_lockout = 1;
 					cooling_lockout_time[temp_pi] = CyclingDelay;//read_eeprom(EEP_CYCLING_DELAY);
-					xTaskCreate( vCoolingLockOut, ( signed portCHAR * ) "CoolingLockOut", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL );
+					//xTaskCreate( vCoolingLockOut, ( signed portCHAR * ) "CoolingLockOut", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL );
 	//				start_timer(COOLING_LOCKOUT_TIMER, DEFAULT_TIMEOUT);
 				}
 				if(ChangeOverDelay)
 				{
 					set_bit(&HEATING_LOCKOUT,temp_pi,1) ; //heating_lockout = 1;
 					heating_lockout_time[temp_pi] = ChangeOverDelay;//read_eeprom(EEP_CHANGOVER_DELAY);
-					xTaskCreate( vHeatingLockOut, ( signed portCHAR * ) "HeatingLockOut", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL );
+					//xTaskCreate( vHeatingLockOut, ( signed portCHAR * ) "HeatingLockOut", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL );
 	//				start_timer(HEATING_LOCKOUT_TIMER, DEFAULT_TIMEOUT);
 				}
 			}
@@ -1064,19 +1059,18 @@ SetDelayFlag(temp_pi,1);
 				{
 					set_bit(&HEATING_LOCKOUT,temp_pi,1) ; //heating_lockout = 1;
 					heating_lockout_time[temp_pi] = CyclingDelay;//read_eeprom(EEP_CYCLING_DELAY);
-					xTaskCreate( vHeatingLockOut, ( signed portCHAR * ) "HeatingLockOut", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL );
+					//xTaskCreate( vHeatingLockOut, ( signed portCHAR * ) "HeatingLockOut", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL );
 	//				start_timer(HEATING_LOCKOUT_TIMER, DEFAULT_TIMEOUT);
 				}
-				if(ChangeOverDelay)
+				if(ChangeOverDelay)//&&(((COOLING_LOCKOUT>>temp_pi) & 0x01) == 0))
 				{
 					set_bit(&COOLING_LOCKOUT,temp_pi,1) ; //cooling_lockout = 1;
 					cooling_lockout_time[temp_pi] = ChangeOverDelay;//read_eeprom(EEP_CHANGOVER_DELAY);
-					xTaskCreate( vCoolingLockOut, ( signed portCHAR * ) "CoolingLockOut", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL );
+					//
 	//				start_timer(COOLING_LOCKOUT_TIMER, DEFAULT_TIMEOUT);
 				}
 			}
 		}
-
 		// This is to bypass the delay timers
 		if(init_delay_flag==0)	
 		{
@@ -1096,7 +1090,7 @@ void CalPwmTime(uint8 percent,uint8 range,uint8 percent1,uint8 range1)
 	uint8 xdata ucPercent;
 	uint32 xdata ulTemp;
 	uint8 ucRange; 
-	uint8 xdata i,j; 
+	uint8 xdata i,j,k; 
 
 	  
  	ucPercent = percent;
@@ -1136,41 +1130,36 @@ void CalPwmTime(uint8 percent,uint8 range,uint8 percent1,uint8 range1)
 		
 		}
     //if(i == 0)
-		pwm1_percent[i] = ucPercent; 			
-		
+		pwm1_percent[i] = ucPercent; 
+    for(k=0;k<5;k++)
+		{
+			if(GetByteBit(&EEP_OutputManuEnable,k)== 1 && (b.eeprom[EEP_RANGE_OUTPUT1 + k] == OUTPUT_RANGE_PWM))		
+				ucPercent = ManualRelay(k);
+			if(i == 0)
+				break;
+		}
 		if(EEP_TimerUnits == 1)//change the timer units to second to make sure the accuracy
 		ulTemp = ulTemp * 60;
 		else if(EEP_TimerUnits == 2)
 		ulTemp = ulTemp * 3600;
-		
-		if(i==0)
-		{
-//			ctest[3] = ulTemp;
-//			ctest[4] = ucPercent;
-//			ctest[5] = mode_stage_changed[i];
-		}
 	
 		giPwmTimeOn[i]  = ulTemp*ucPercent/100;
 		giPwmTimeOff[i] = ulTemp*(100 - ucPercent)/100;
-		
-//		ctest[1] = giPwmTimeOn[0];
-		
-		//pwm[i] = ucPercent;
+			
 
 		if(giPwmTimeOn[i] > 0 && ucPercent > 0 && mode_stage_changed[i] == 1)
-		{		 		
+		{			
 			timer_enable = 1;								
-			CalDesireTime(giPwmTimeOn[i],0,i+1); 				
+			CalDesireTime(giPwmTimeOn[i],EEP_TimerUnits,i+1); 	
 			timer_switch_status[i] = 1;
 			mode_stage_changed[i] = 0;
 		} 
+
 		if(giPwmTimeOn[i] == 0 || ucPercent == 0) 
 		{
 			timer_switch_status[i] = 0;	   //if cool stage,timer_switch_status[0] = 1; timer_switch_status[1] = 0;  
 		}
-		//if(i == 0)
-//			ctest[2] = timer_switch_status[0];
-//			ctest[0] = timer_enable;
+
 	}
 
 }
@@ -1187,13 +1176,29 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
   for(i=0;i<2;i++)
 	{
 		j = b.eeprom[EEP_PID_OUTPUT6 + i];// 0 or 1,pid0 or pid1
+//		if(i==1)
+//			ctest[0] = j;
 		if(b.eeprom[EEP_INTERLOCK_OUTPUT6 + i] == 7)//free cool
 			test_buf1 = testBUF;
 		else
-			test_buf1 = (ValveValue[j] >> (i*2)) & 0x03;		
+			test_buf1 = (ValveValue[j] >> (i*2)) & 0x03;	
+
+
+//			ctest[1] = cool_pid[1];
+
+//			ctest[2] = cool_pid[2];
 		
-		ucHeatTableNumber = b.eeprom[EEP_HEAT_ORIGINAL_TABLE - (j << 1)];//original table number(pid0) or universal table number(pid1)
-		ucCoolTableNumber = b.eeprom[EEP_COOL_ORIGINAL_TABLE - (j << 1)];
+		if(j<2)
+		{
+			ucHeatTableNumber = b.eeprom[EEP_HEAT_ORIGINAL_TABLE - (j << 1)];//original table number(pid0) or universal table number(pid1)
+			ucCoolTableNumber = b.eeprom[EEP_COOL_ORIGINAL_TABLE - (j << 1)];
+		}
+		else if(j == 2)
+		{
+			ucHeatTableNumber = EEP_HEAT_TABLE3;//original table number(pid0) or universal table number(pid1)
+			ucCoolTableNumber = EEP_COOL_TABLE3;		
+		}
+		
 		
 		if(frc_mode == FRC_FUNCTION_START)
 		{
@@ -1220,6 +1225,11 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
 								tmp = mul(universal_pid[j][ucCoolTableNumber -1 + current_mode_of_operation[j]] - pid[j], 1000 )/universal_pid[j][ucHeatTableNumber + ucCoolTableNumber -1];								
 							else
 								tmp = mul(universal_pid[j][ucHeatTableNumber -1 + current_mode_of_operation[j]] - pid[j], 1000 )/universal_pid[j][ucHeatTableNumber + ucCoolTableNumber -1];																							 //universal_pid[j][ucCoolTableNumber + b.eeprom[EEP_HEAT_ORIGINAL_TABLE - (EEP_PidOutput6 << 1)]-1];
+//							if(j == 1)
+//								ctest[3] = tmp;
+//							if(j == 2)
+//								ctest[4] = tmp;
+							
 							if(tmp >1000)
 								tmp = 1000;
 							}
@@ -1234,7 +1244,7 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
 							tmp = 0;
 					break;
 
-					case PID2:   //valve opens in stage2 heating
+					case PID2:   // 3  valve opens in stage2 heating
 					//pid_test4 = 92;
 					 if(pid[j] < cool_pid[j])
 						{
@@ -1270,13 +1280,19 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
 					test_buf1 = 0;
 				else
 					test_buf1 = ValveValue[j] & (0x40<< i);
+				
+//				if(j == 1)
+//					ctest[5] = test_buf1;
+//				if(j == 2)
+//					ctest[6] = test_buf1;
+				
 
 				if(test_buf1)
 				{				       						
 					if(pid[j] < cool_pid[j])
 					{
 						if(ucHeatTableNumber == 0)							
-							 	tmp = mul(universal_pid[j][ucCoolTableNumber -1 + current_mode_of_operation[j]] - pid[j], 1000 )/universal_pid[j][ucHeatTableNumber + ucCoolTableNumber -1];
+							tmp = mul(universal_pid[j][ucCoolTableNumber -1 + current_mode_of_operation[j]] - pid[j], 1000 )/universal_pid[j][ucHeatTableNumber + ucCoolTableNumber -1];
 						else						 	 
 							tmp = mul(universal_pid[j][ucHeatTableNumber -1 + current_mode_of_operation[j]]- pid[j] , 500 )/universal_pid[j][ucCoolTableNumber + ucHeatTableNumber-1];	
 					}									  		 
@@ -1285,8 +1301,9 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
 						tmp = mul(pid[j] - universal_pid[j][current_mode_of_operation[j]-7], 500 )/(100 - universal_pid[j][b.eeprom[EEP_HEAT_ORIGINAL_TABLE - (j << 1)] - 1]);
 					else 
 						tmp = 0;
-				} 
-		 
+				}
+//			if(i == 1)				
+//		   ctest[7] = tmp;
  
 				
 #ifdef VAV
@@ -1323,25 +1340,39 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
 			    if(b.eeprom[EEP_OUTPUT1_SCALE + i] != OUTPUT_ANALOG_RANGE_PWM)
 					{
 					if(b.eeprom[EEP_OUTPUT1_SCALE + i] == ZERO_FIVEVOLTS)       // 0 - 5 v
-					 	valve[i] = tmp / 2;	   // * 100 / 2
+					 	//valve[i] = tmp / 2;	   // * 100 / 2
+						output_priority[MAX_BOS+i][9] = tmp / 2;
 					else if(b.eeprom[EEP_OUTPUT1_SCALE + i] == TWO_TENVOLTS)  // this is for a 2-10v valve 
 						{
-						valve[i] = tmp * 5 / 6 + 200;   // * 5 / 6
-						if(valve[i] >1000)
-							valve[i] = 1000;
+//						valve[i] = tmp * 5 / 6 + 200;   // * 5 / 6
+//						if(valve[i] >1000)
+//							valve[i] = 1000;
+						output_priority[MAX_BOS+i][9] = tmp * 5 / 6 + 200;   // * 5 / 6
+						if(output_priority[MAX_BOS+i][9] >1000)
+							output_priority[MAX_BOS+i][9] = 1000;
 						}
 					else if (b.eeprom[EEP_OUTPUT1_SCALE + i] == TEN_ZEROVOLTS)        					// reverse 
-						valve[i] = 1000 - tmp; 	
+						//valve[i] = 1000 - tmp; 
+						output_priority[MAX_BOS+i][9]	= 1000 - tmp; 				
 					else
-					 	valve[i] = tmp;	   			// * 100
+					 	//valve[i] = tmp;	   			// * 100
+						output_priority[MAX_BOS+i][9] = tmp;
 					
+//					if(i==1)
+//						ctest[8] = tmp;
 					
 					}
+//					if(i==1)
+//						ctest[9] = output_priority[MAX_BOS+i][9];
+					
+					
 	}
 		if((EEP_Interlock6 == 2 && mul_analog_input[0] == 0)  || (EEP_Interlock6 == 3 && mul_analog_input[1] == 0))
-							valve[0] = 0;	
+							//valve[0] = 0;
+				output_priority[MAX_BOS][9] = 0;
 		if((EEP_Interlock7 == 2 && mul_analog_input[0] == 0)  || (EEP_Interlock7 == 3 && mul_analog_input[1] == 0))
-						valve[1] = 0;		
+					//	valve[1] = 0;	
+				output_priority[MAX_BOS+1][9] = 0;		
 
 }
 
@@ -1361,10 +1392,10 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
  void control_logic( )  
 {
     //uint16  output_temp ;
-	uint8 test_buf ,valve_value[3],temp_output,test_buf1,temp_output1,i;
-	#ifdef VAV
+	uint8 test_buf ,valve_value[3],temp_output,test_buf1,temp_output1,i,j;
+	//#ifdef VAV
 	uint8 xdata test_buf2;
-	#endif
+	//#endif
 	uint8 relay_num,pwmindex[2];
 	uint16 xdata  temp_output2;
 	int16 temp ;
@@ -1406,23 +1437,23 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
 	}
 	// Read the OUTPUT_1TO5 from the SOP table.
 	//OUTPUT_1TO5 = read_eeprom(EEP_FAN0_OPER_TABLE_COAST + fan_speed_user * 7 + current_mode_of_operation[0] );
-	for(test_buf=0; test_buf<4; test_buf++)
-	{
-		if(read_eeprom(EEP_PID_OUTPUT4 + test_buf) == 3)
-		{
-			if(pid[0] > pid[1])
-				b.eeprom[EEP_PID_OUTPUT4 + test_buf] = 0;
-			else
-				b.eeprom[EEP_PID_OUTPUT4 + test_buf] = 1;
-		}
-		else if(read_eeprom(EEP_PID_OUTPUT4 + test_buf) == 4)
-		{
-			if(pid[0] < pid[1])
-				b.eeprom[EEP_PID_OUTPUT4 + test_buf] = 0;
-			else
-				b.eeprom[EEP_PID_OUTPUT4 + test_buf] = 1;
-		}
-	}
+//	for(test_buf=0; test_buf<4; test_buf++)
+//	{
+//		if(read_eeprom(EEP_PID_OUTPUT4 + test_buf) == 4)
+//		{
+//			if(pid[0] > pid[1])
+//				b.eeprom[EEP_PID_OUTPUT4 + test_buf] = 0;
+//			else
+//				b.eeprom[EEP_PID_OUTPUT4 + test_buf] = 1;
+//		}
+//		else if(read_eeprom(EEP_PID_OUTPUT4 + test_buf) == 3)
+//		{
+//			if(pid[0] < pid[1])
+//				b.eeprom[EEP_PID_OUTPUT4 + test_buf] = 0;
+//			else
+//				b.eeprom[EEP_PID_OUTPUT4 + test_buf] = 1;
+//		}
+//	}
 //-------------------------------------------------------------PID1----------------------------------------------------------------------
 	
 	
@@ -1438,6 +1469,7 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
 		else
 			test_buf = Output_PWM_Table(current_mode_of_operation[0]);//read_eeprom(EEP_OUTPUT_PWM_AUTO_BEGIN + current_mode_of_operation[0]); //PWM range
 		temp_output = mul(universal_pid[0][EEP_HEAT_TABLE1 -1 + current_mode_of_operation[0]] - pid[0], 100 ) / universal_pid[0][EEP_COOL_TABLE1 + EEP_HEAT_TABLE1-1];
+		
 		//PWM percentage
 		//temp_output = temp_output/universal_pid[0][EEP_COOL_TABLE1 + EEP_HEAT_TABLE1-1];
 		if(	temp_output > 100)
@@ -1454,7 +1486,7 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
 		else
 			test_buf = Output_PWM_Table(current_mode_of_operation[0] - (DAYTIME_COOLING6 - EEP_COOL_TABLE1));
 		temp_output = mul(pid[0] - universal_pid[0][current_mode_of_operation[0]-7], 100 )/(100 - universal_pid[0][EEP_HEAT_TABLE1 - 1]);
-//    ctest[1] = temp_output;
+
 		if(	temp_output > 100) 
 		temp_output = 100;
 	 	
@@ -1468,14 +1500,15 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
 			output_buf[1] = PID2_Output_OFF_Table(current_mode_of_operation[1]);//read_eeprom(EEP_UNIVERSAL_OFF_TABLE_BEGIN + current_mode_of_operation[1]);
 			test_buf1 = Output_PWM_Off_Table(current_mode_of_operation[1]);
 		}
-			else
-			{
-		// get output status from output table accordingto fan speed and current mode ,pid2 is working
-			output_buf[1] = PID2_Output_Table(current_mode_of_operation[1]);//read_eeprom(EEP_UNIVERSAL_OUTPUT_BEGIN + current_mode_of_operation[1]);
-			test_buf1 = Output_PWM_Table(current_mode_of_operation[1]);	
-			}
+		else
+		{
+	// get output status from output table accordingto fan speed and current mode ,pid2 is working
+		output_buf[1] = PID2_Output_Table(current_mode_of_operation[1]);//read_eeprom(EEP_UNIVERSAL_OUTPUT_BEGIN + current_mode_of_operation[1]);
+		test_buf1 = Output_PWM_Table(current_mode_of_operation[1]);	
+		}
 		//read_eeprom(EEP_OUTPUT_PWM_AUTO_BEGIN + current_mode_of_operation[1]);
-		temp_output1 = mul(universal_pid[1][b.eeprom[EEP_HEAT_ORIGINAL_TABLE - 2] -1 + current_mode_of_operation[1]] - pid[1], 100 )/universal_pid[1][b.eeprom[EEP_COOL_ORIGINAL_TABLE - 2] + b.eeprom[EEP_HEAT_ORIGINAL_TABLE - 2]-1];
+		//temp_output1 = mul(universal_pid[1][b.eeprom[EEP_HEAT_ORIGINAL_TABLE - 2] -1 + current_mode_of_operation[1]] - pid[1], 100 )/universal_pid[1][b.eeprom[EEP_COOL_ORIGINAL_TABLE - 2] + b.eeprom[EEP_HEAT_ORIGINAL_TABLE - 2]-1];
+		temp_output1 = mul(universal_pid[1][EEP_HEAT_TABLE2-1 + current_mode_of_operation[1]] - pid[1], 100 )/universal_pid[1][EEP_COOL_TABLE2 + EEP_HEAT_TABLE2-1];
 		if(	temp_output1 > 100)
 		temp_output1 = 100;			 
 	}
@@ -1601,16 +1634,16 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
 
 	for(test_buf=0; test_buf<7; test_buf++)
 	{
-    	if(pid_ctrl_bit[test_buf] == 3)
+    	if(pid_ctrl_bit[test_buf] == 3)  //max(pid1 2)
     	{
-    		if(pid[0] > pid[1])
+    		if(pid[0] < pid[1])
     		pidoutput[test_buf] = 0;
     		else
     		pidoutput[test_buf] = 1;
     	}
-    	else if(pid_ctrl_bit[test_buf] == 4)
+    	else if(pid_ctrl_bit[test_buf] == 4)//min(pid1 2)
     	{
-    		if(pid[0] < pid[1])
+    		if(pid[0] > pid[1])
     		pidoutput[test_buf] = 0;
     		else
     		pidoutput[test_buf] = 1;
@@ -1656,18 +1689,21 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
 //	floattest1 = output_temp;
 	if(output_floating_flag == OUTPUT_NO_FLOATING)
 		{	 
-		OUTPUT_1TO5.BYTE  = output_temp & 0xff ;			
+		//OUTPUT_1TO5.BYTE  = output_temp & 0xff ;
+			for(i=0;i<5;i++)
+			{
+				output_priority[i][9] = (output_temp >> i) & 0x01;//GetByteBit(&output_temp,i);     //manual piority is [7]  auto piority is [9]
+			}						
 		}
 	else
 		{
 		float_buf = (uint8)output_temp; 	
 		for(i=0;i<5;i++)
 			{
-			if((b.eeprom[EEP_RANGE_OUTPUT1 + i] != FLOATING_COOLING) &&
-				(b.eeprom[EEP_RANGE_OUTPUT1 + i] != FLOATING_HEATING))
+			if((b.eeprom[EEP_RANGE_OUTPUT1 + i] != FLOATING_COOLING) &&(b.eeprom[EEP_RANGE_OUTPUT1 + i] != FLOATING_HEATING))				
 				{
-				SetByteBit(&OUTPUT_1TO5.BYTE,i,GetByteBit(&float_buf,i));
-
+				//SetByteBit(&OUTPUT_1TO5.BYTE,i,GetByteBit(&float_buf,i));
+					output_priority[i][9] = GetByteBit(&float_buf,i);
 				}
 
 			}
@@ -1695,11 +1731,13 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
 				//	temp_bit = !temp_bit;//first PWM output ,index of timer switch status is 0,second pwm ouput,index is 1
 		 			if(timer_switch_status[temp_bit] == 1)
 						{
-						SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,1);  
+						//SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,1);
+							output_priority[relay_num][9] = 1;
 						}
 					else
 						{
-						SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,0); 		
+							//SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,0); 
+							output_priority[relay_num][9] = 0;							
 						}
 					}
 				}
@@ -1709,9 +1747,11 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
 					{
 					temp_bit = !temp_bit;//first PWM output ,index of timer switch status is 0,second pwm ouput,index is 1
 					if(timer_switch_status[temp_bit] == 1)
-						SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,1);
+						//SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,1);
+						output_priority[relay_num][9] = 1;
 				  else
-						SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,0);
+						//SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,0);
+						output_priority[relay_num][9] = 0;
 					}
 				}
 			}
@@ -1734,17 +1774,17 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
 	{
 		if(read_eeprom(EEP_PID_OUTPUT6 + test_buf) == 3)
 		{
-			if(pid[0] > pid[1])
+			if(pid[0] < pid[1])
 				b.eeprom[EEP_PID_OUTPUT6 + test_buf] = 0;
 			else
 				b.eeprom[EEP_PID_OUTPUT6 + test_buf] = 1;
 		}
 		else if(read_eeprom(EEP_PID_OUTPUT6 + test_buf) == 4)
 		{
-			if(pid[0] < pid[1])
+			if(pid[0] > pid[1])
 				b.eeprom[EEP_PID_OUTPUT6 + test_buf] = 0;
 			else
-				b.eeprom[EEP_PID_OUTPUT6 + test_buf] = 1;
+				b.eeprom[EEP_PID_OUTPUT6 + test_buf] = 1; 
 		}
 	}
 
@@ -1757,6 +1797,7 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
 			valve[1] -= 50 ;
 			if(valve[1] < 0)
 				valve[1] =	1000 ;
+			delay_ms(500);
 //			test_buf = valve[0]/4;
 
 //			write_eeprom( EEPROM_TEST_ADDRESS, test_buf);
@@ -1909,19 +1950,29 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
 
 				  	OutputValue(test_buf,valve_value); 
 
+
 				
 			}// end of switch default case
 
  
 			if(GetByteBit(&EEP_OutputManuEnable,5))
 			{
-				valve[0] = (int16)(ManualAO1_HI << 8) + ManualAO1_LO;	 
+				//valve[0] = (int16)(ManualAO1_HI << 8) + ManualAO1_LO;
+				output_priority[MAX_BOS][7] = (int16)(ManualAO1_HI << 8) + ManualAO1_LO;				
+			}
+			else
+			{
+				output_priority[MAX_BOS][7] = 0xff;
 			}
 			 
 			if(GetByteBit(&EEP_OutputManuEnable,6))
 			{
-				valve[1] = (int16)(ManualAO2_HI << 8) + ManualAO2_LO;				 
+				//valve[1] = (int16)(ManualAO2_HI << 8) + ManualAO2_LO;	
+				output_priority[MAX_BOS+1][7] = (int16)(ManualAO2_HI << 8) + ManualAO2_LO;					
 			}
+			else
+				output_priority[MAX_BOS+1][7] = 0xff;
+			
 //			for(test_buf=0;test_buf<2;test_buf++)
 //			{
 //				if(valve[test_buf] >1000)
@@ -2032,20 +2083,24 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
 //			else
 //			{
 				if((b.eeprom[EEP_INTERLOCK_OUTPUT1 + relay_num] == 1 && !occupied) || (b.eeprom[EEP_INTERLOCK_OUTPUT1 + relay_num] == 2 && mul_analog_input[0] == 0)  || (b.eeprom[EEP_INTERLOCK_OUTPUT1 + relay_num] == 3 && mul_analog_input[1] == 0))
-					SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,0); //CC RELAY SET
+					//SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,0); //CC RELAY SET
+				   output_priority[relay_num][9] = 0;
 				else if(b.eeprom[EEP_INTERLOCK_OUTPUT1 + relay_num] == 4 && b.eeprom[EEP_TIMER_SELECT ] == 0)
 				{
 					if(timer_switch_status[0] == 1)
-					SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,1);
+					//SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,1);
+						output_priority[relay_num][9] = 1;
 				}
 				else if(b.eeprom[EEP_INTERLOCK_OUTPUT1 + relay_num] == 5 && b.eeprom[EEP_TIMER_SELECT ] == 0)
 				{
-					SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,timer_switch_status[0] & GetByteBit(&OUTPUT_1TO5.BYTE,relay_num));
+					//SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,timer_switch_status[0] & GetByteBit(&OUTPUT_1TO5.BYTE,relay_num));
+					output_priority[relay_num][9] = timer_switch_status[0] & GetByteBit(&OUTPUT_1TO5.BYTE,relay_num);
 				}
 				else if(b.eeprom[EEP_INTERLOCK_OUTPUT1 + relay_num] == 6 && b.eeprom[EEP_TIMER_SELECT ] == 2)
 				{
 					if(TIMER_FLAG == 1)
-						SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,0);				 
+						//SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,0);
+						output_priority[relay_num][9] = 0;
 				}
 //			}
 //		}
@@ -2059,10 +2114,13 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
 			{
 		///cc 2010/01/20 blank the code below for Roth Bros customer 	
 			if(lighting_stage == 1)
-				SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,1);
+				//SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,1);
+				output_priority[relay_num][9] = 1;
 			else
-				SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,0);
+				//SetByteBit(&OUTPUT_1TO5.BYTE,relay_num,0);
+				output_priority[relay_num][9] = 0;
 			}
+		}
 //	    else if(b.eeprom[EEP_OUTPUT1_FUNCTION + relay_num] == OUTPUT_RANGE_PWM)//pwm
 //			if(b.eeprom[EEP_RANGE_OUTPUT1 + relay_num] == OUTPUT_RANGE_PWM)//pwm	modify pwm way to mode select, not function 
 //			{	
@@ -2076,17 +2134,42 @@ void  OutputValue(uint8 testBUF,uint8 *ValveValue)
 //				SetByteBit(&OUTPUT_1TO5,relay_num,0);	 
 //				}			
 //			}
-		}
-		
-//		ctest[0] = EEP_PidOutput1;
-//		ctest[1] = EEP_PidOutput2;
-//		ctest[2] = EEP_PidOutput3;
-//		ctest[3] = EEP_PidOutput4;
-//		ctest[4] = EEP_PidOutput5;
-//		ctest[5] = EEP_PidOutput6;
-//		ctest[6] = EEP_PidOutput7;
+//add piority array for the output
 
-	
+			
+			
+		for(i=0;i<MAX_BOS;i++)
+		{
+			for(j=0;j<16;j++)
+			{
+				if(output_priority[i][j] != 0xff)
+				{
+					//piority_flag =
+					if(output_priority[i][j] == 0)
+						SetByteBit(&OUTPUT_1TO5.BYTE,i,0);
+					else if(output_priority[i][j] == 1)
+						SetByteBit(&OUTPUT_1TO5.BYTE,i,1);
+					break;	
+				}
+		  }
+		}
+    if(sequence_of_operation != TEST_MODE)
+		{
+			for(i=MAX_BOS;i<MAX_OUTS;i++)
+			{
+				for(j=0;j<16;j++)
+				{
+					if(output_priority[i][j] != 0xff)
+					{
+						//piority_flag =
+						valve[i-MAX_BOS] = output_priority[i][j];
+						break;;	
+					}
+				}
+			}
+		}
+
+		
 }//end of control_logic() 
 
 //void init_valve_operation_eeprom( )
@@ -2181,7 +2264,10 @@ uint8 idata channel;
 			analog_output_buffer = humidity; 
 		break;
 		case TRANSDUCER_CO2:
-			analog_output_buffer =	co2_data; 
+			analog_output_buffer =	co2_data; 		
+		  transducer_buffer = 1000 * (analog_output_buffer - MinTransducerRange)  / (MaxTransducerRange - MinTransducerRange);
+			analog_output_buffer = transducer_buffer;
+			
 		break;
 
 		
@@ -2210,9 +2296,21 @@ uint8 stage_temp = 0;
   return stage_temp;
 }
 
+#define COAST_MODE	0
+#define COOL_MODE		1
+#define HEAT_MODE		2
 uint8 get_current_mode(void)
 {
 	uint8 mode_temp = 0;
+	
+	#ifdef TSTAT7_ARM
+	if((current_mode_of_operation[0]>DAYTIME_COASTING) && (current_mode_of_operation[0]<DAYTIME_HEATING1))//COOLING MODE
+		mode_temp = COOL_MODE;
+	else if(current_mode_of_operation[0]>=DAYTIME_HEATING1)//HEATING MODE
+		mode_temp = HEAT_MODE;
+	else
+		mode_temp = COAST_MODE;
+	#else
 	mode_temp = get_bit(COOLING_MODE,0);
 	if(EEP_COOL_TABLE1 == 0)
 		mode_temp = 0;	
@@ -2222,6 +2320,10 @@ uint8 get_current_mode(void)
 		if(EEP_HEAT_TABLE1 == 0)
 			mode_temp = 0;
 		}
+	#endif
+		
+		
+		
    return mode_temp;		
 }
 

@@ -58,12 +58,16 @@ enum {
 	SCRATCHPAD_ADDRESS , 			// -	-	Internal scratch pad address	
   HARDWARE_INFORMATION,     // 20 indicate if clock is present	
 	MODBUS_BACNET_SWITCH,
+	WIFI_FAC,//22
+	MODBUS_MAX_MASTER,
+	
 	
 	MODBUS_ZIGBEE_INDEX	= 51,
 	MODBUS_ZIGBEE_INFO1,
 	MODBUS_ZIGBEE_INFO48 = 99,
 
 	
+ 
 
 
 
@@ -94,10 +98,6 @@ enum {
 
 
 
-
-
-
-	
 	COOLHEATMODE=101,//				// -	-	Heating or cooling mode in effect	0 = coasting, 1 = cooling, 2 = heating
 	PID1_MODE_OPERATION,//				// -	-	Current state of Tstat.  High heat -> coasting -> high cool.
 	SEQUENCE,//					// 0	2	Sequence of operation , tstat behaves differently according to sequence
@@ -136,8 +136,8 @@ enum {
 	ANALOG_INPUT6_VALUE,
 	ANALOG_INPUT7_VALUE,    
 	ANALOG_INPUT8_VALUE,
-	EXTERNAL_SENSOR1,  //CO2	//
-	EXTERNAL_SENSOR2,  //HUM/		
+	EXTERNAL_SENSOR1, //CO2	//
+	EXTERNAL_SENSOR2, //HUM/		
 	INPUT_MANU_ENABLE,//
 	FILTER,//											//		0 = OFF, 1 = trigger unoccupied on falling edge, 2 = occupied high, unoccupied low
 	INPUT1_FILTER,	
@@ -152,7 +152,7 @@ enum {
 	HUM_FILTER,
 	CALIBRATION,//			// 0	255	Thermistor calibration term 
 	CALIBRATION_INTERNAL_THERMISTOR,//
-	CALIBRATION_ANALOG1,//							
+	CALIBRATION_ANALOG1,// 							
 	CALIBRATION_ANALOG2,//				
 	CALIBRATION_ANALOG3,//
 	CALIBRATION_ANALOG4,//
@@ -377,7 +377,7 @@ enum {
 	AVERAGE_SETPOINT,//
 	UNOCCUPIED_HEATING,//
 	UNOCCUPIED_COOLING,//
-	RH_SETPOINT,//
+	SETPOINT_UNLIMIT,//
  	CURRENT1_SETPOINT,//  tbd  get rid of this
   TEMP_SELECT,//			 		// 1= external sensor analog input 1 , 2 = internal thermistor, 3 = average the internal thermistor and analog input1
 	INPUT1_SELECT,//              	// 1    254 reg 241 select which way the analog input is
@@ -690,7 +690,7 @@ enum {
 	WIRELESS_PIR_RESPONSE5,
 	TSTAT_HEAT_COOL,
 	SPARE1,
-	SPARE2,
+	CLEAR_EEPROM,
 	TSTAT_HUM_PIC_VERSION,  //515
 	INTERNAL_SENSOR_MANUAL, //0 = AUTO, 1 = MANUAL
 	PRESSURE_VALUE,
@@ -756,16 +756,16 @@ enum {
 	MODE5_NAME4,
   OUTSIDETEM,
 	OUTSIDETEM_SLAVE,		
-	TSTAT_TEST1,//	
-	TSTAT_TEST2,//
-	TSTAT_TEST3,
-	TSTAT_TEST4,//						
-	TSTAT_TEST5,//
-	TSTAT_TEST6,
-	TSTAT_TEST7,
-	TSTAT_TEST8,
-	TSTAT_TEST9,
-	TSTAT_TEST10,	
+	TESTSPARE1,//TSTAT_TEST1,//	
+	TESTSPARE2,//TSTAT_TEST2,//
+	TESTSPARE3,//TSTAT_TEST3,
+	TESTSPARE4,//TSTAT_TEST4,//						
+	TESTSPARE5,//TSTAT_TEST5,//
+	TESTSPARE6,//TSTAT_TEST6,
+	TESTSPARE7,//TSTAT_TEST7,
+	TESTSPARE8,//TSTAT_TEST8,
+	TESTSPARE9,//TSTAT_TEST9,
+	TESTSPARE10,//TSTAT_TEST10,	
 	HUM_CALIBRATION,
 	PIC_VERSION,
 	SLEEP_COOLING_DB,
@@ -798,10 +798,10 @@ enum {
 	OUTPUT_PWM_OFF_HEAT3,//	
   DTERM,	
 	PID_SAMPLE_TIME,
-	
-	
-	
-	
+	MODBUS_ZIGBEE_ID,//.]
+	MODBUS_DELTA_TEM1,
+	MODBUS_DELTA_TEM2,
+	MODBUS_DELTA_TEMPERATURE,
 	
 	
 	
@@ -975,7 +975,7 @@ enum {
 	AWAY_COOL_DB,
 	AWAY_HEAT_DB,
 	BACNET_STATION_NUM,
-	BACNET_INSTANCE,
+	BACNET_INSTANCE_SPARE,
 	MODBUS_4TO20MA_BOTTOM,
 	MODBUS_4TO20MA_TOP,
 	MODBUS_4TO20MA_UNIT_HI,
@@ -988,57 +988,8 @@ enum {
 	BAC_T6,
 	BAC_T7,
 	BAC_T8,
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
+	BACNET_INSTANCE_LOW,
+	BACNET_INSTANCE_HIGH,
 	
 	
 	
@@ -1109,7 +1060,36 @@ enum {
 	
 /*********FOR CALIBRATE HUM SENSOR******************/
 /******************add by ye************************/		
+	TSTAT_TEST1 = 1900,//
+	TSTAT_TEST50 = 1949,	
+/******************END*******************************/
+/******** WIFI START ************************/
+	MODBUS_WIFI_START = 2000,
+	MODBUS_WIFI_SSID_MANUAL_EN = 2000,  // 2001 ~ 2009 reserved
+	MODBUS_WIFI_MODE, // 0-AUTO 1-STATIC
+	MODBUS_WIFI_STATUS,
+	MODBUS_WIFI_RESTORE,
+	MODBUS_WIFI_MODBUS_PORT,
+	MODBUS_WIFI_BACNET_PORT,
+	MODBUS_WIFI_REV, // current is 2
+	MODBUS_WIIF_START_SMART,
 	
+	MODBUS_WIFI_SSID_START = 2010,	// 2010 ~ 2041 user name 64 bytes
+	MODBUS_WIFI_SSID_END = 2041,	
+	MODBUS_WIFI_PASS_START = 2042,	// 2042 ~ 2057 password 32 bytes
+	MODBUS_WIFI_PASS_END = 2057,
+	
+	MODBUS_WIFI_IP1 = 2058 ,
+	MODBUS_WIFI_NETMASK = 2062,
+	MODBUS_WIFI_GETWAY = 2066,
+	MDOBUS_WIFI_MACADDR = 2070,
+	
+	MODBUS_WIFI_END = 2100,
+/******** WIFI END ************************/
+
+
+
+
 /******************END*******************************/
 
 };
@@ -1118,6 +1098,11 @@ extern uint8 serial_no_activity;
 extern u8 USART_RX_BUFA[USART_REC_LEN];     //接收缓冲,最大USART_REC_LEN个字节.
 extern u8 USART_RX_BUFB[USART_REC_LEN];
 #ifdef TSTAT_ZIGBEE 
+extern uint16 zigbee_id_temp;
+extern uint8 zigbee_present;
+extern uint8 zigbee_send_flag;
+extern uint16 zigbee_id;
+extern uint8 zigbee_rev_cnt;
 extern u8 USART_RX_BUFC[50];     //接收缓冲,最大USART_REC_LEN个字节.
 extern u8 USART_RX_BUFD[50];
 #endif
@@ -1144,35 +1129,35 @@ uint8 checkCrc(void);
 #ifdef TSTAT_ZIGBEE 
 uint8 checkCrcB(void);
 #endif
-typedef struct 
-{
-	u8 serial_Num[4];
-	u16 software ;
-	u8 address ;
-	u32 baudrate ;
-	u8 update ;
-	u8 product ;
-	u8 hardware_Rev;
-//	u8 SNWriteflag ;
-	u8 com_config[3];
-	u8 protocal ;
-	#ifdef T322AI 
-	u16 input[MAX_AI_CHANNEL] ;
-	u8  filter_value[MAX_AI_CHANNEL];
-	u8  range [MAX_AI_CHANNEL];
-	u16  offset[MAX_AI_CHANNEL];
-	#endif
-	#ifdef T38AI8AO6DO 
-	u16 input[MAX_AI_CHANNEL] ;
-	u8  filter_value[MAX_AI_CHANNEL];
-	u8  range [MAX_AI_CHANNEL];
-	u16  offset[MAX_AI_CHANNEL];
-	u16	 switch_gourp[2] ;
-//	u8 	digit_output[MAX_DOS] ;
-//	u16 analog_output[MAX_AOS] ;
-	#endif 	
-}STR_MODBUS ;
-extern STR_MODBUS modbus ;
+//typedef struct 
+//{
+//	u8 serial_Num[4];
+//	u16 software ;
+//	u8 address ;
+//	u32 baudrate ;
+//	u8 update ;
+//	u8 product ;
+//	u8 hardware_Rev;
+////	u8 SNWriteflag ;
+//	u8 com_config[3];
+//	u8 protocal ;
+//	#ifdef T322AI 
+//	u16 input[MAX_AI_CHANNEL] ;
+//	u8  filter_value[MAX_AI_CHANNEL];
+//	u8  range [MAX_AI_CHANNEL];
+//	u16  offset[MAX_AI_CHANNEL];
+//	#endif
+//	#ifdef T38AI8AO6DO 
+//	u16 input[MAX_AI_CHANNEL] ;
+//	u8  filter_value[MAX_AI_CHANNEL];
+//	u8  range [MAX_AI_CHANNEL];
+//	u16  offset[MAX_AI_CHANNEL];
+//	u16	 switch_gourp[2] ;
+////	u8 	digit_output[MAX_DOS] ;
+////	u16 analog_output[MAX_AOS] ;
+//	#endif 	
+//}STR_MODBUS ;
+//extern STR_MODBUS modbus ;
 extern vu8 serial_receive_timeout_count ;
 #ifdef TSTAT_ZIGBEE 
 extern vu8 serial_receive_timeout_countB ;

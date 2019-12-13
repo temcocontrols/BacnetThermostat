@@ -56,7 +56,7 @@ extern "C" {
     bool Analog_Output_Object_Instance_Add(
         uint32_t instance);
 
-    float Analog_Output_Present_Value(
+    float Analog_Output_Present_Value1(
         uint32_t object_instance);
     unsigned Analog_Output_Present_Value_Priority(
         uint32_t object_instance);

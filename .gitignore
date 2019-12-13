@@ -57,3 +57,4 @@ dkms.conf
 *.hex
 *.m51
 **/OBJ
+*.TMP

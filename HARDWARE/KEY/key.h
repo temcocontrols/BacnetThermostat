@@ -17,7 +17,8 @@
 #define  OCCUPIED_CODE     COOL_UP_CODE
 #define  UNOCCUPIED_CODE   FAN_UP_CODE
 		
-		
+extern uint8 item_menu;
+extern uint8 current_item;
 extern uint8  prev_keypad_state;
 extern uint8 setpoint_adjust_flag;
 extern uint8 down_key;

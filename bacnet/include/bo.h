@@ -97,7 +97,7 @@ int Binary_Output_Encode_Property_APDU(
     bool Binary_Output_Write_Property(
         BACNET_WRITE_PROPERTY_DATA  *  wp_data);
 
-    BACNET_BINARY_PV Binary_Output_Present_Value(
+    BACNET_BINARY_PV Binary_Output_Present_Value1(
         uint32_t instance);
     bool Binary_Output_Present_Value_Set(
         uint32_t instance,

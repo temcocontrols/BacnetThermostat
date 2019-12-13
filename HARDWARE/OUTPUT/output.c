@@ -12,6 +12,7 @@
 #include "modbus.h"
 #include "usart.h"
 #include "rs485.h"
+#include "delay.h"
 //#include "user_data.h"
 //uint8 output_floating_flag = 0;
 //uint16_t AO_Present_Value[MAX_AOS][BACNET_MAX_PRIORITY];
@@ -405,6 +406,7 @@ uint8 i = 0;
 			
 			set_output(TIM4,2, valve[0]);
 			set_output(TIM4,3, valve[1]);	
+			delay_ms(500);
 	}
  
 	else
@@ -472,8 +474,13 @@ uint8 i = 0;
 			{
 				if(GetByteBit(&EEP_OutputManuEnable,i))   //USER SET
 				{ 
-					SetByteBit(&RELAY_1TO5.BYTE,i,!GetByteBit(&ManualRelayAll,i));//CC 2011/01/18 RELAY SET
+					if((b.eeprom[EEP_RANGE_OUTPUT1 + i]) != OUTPUT_RANGE_PWM)
+						SetByteBit(&RELAY_1TO5.BYTE,i,!GetByteBit(&ManualRelayAll,i));//CC 2011/01/18 RELAY SET
 				//	OUTPUT_1TO5 = read_eeprom(MANUAL_RELAY)&0x1f;	 
+				}
+				else
+				{
+					output_priority[i][7] = 0xff;
 				}
 				if(deadmaster_triggered == 1)
 				{
@@ -481,16 +488,17 @@ uint8 i = 0;
 						SetByteBit(&RELAY_1TO5.BYTE,i,!GetByteBit(&DeadMsater_OutputState,i));//CC 2011/01/18 RELAY SET
 					else if(DeadMsater_AutoManual == 1)//deadmaster auto mode, outputs will follow pid control
 					{
+						if(i == 0)
+						{
 						EEP_OutputManuEnable = 0;  //trun to auto mod
 						write_eeprom(EEP_OUTPUT_MANU_ENABLE, 0);
-						if(i == 4)
-							deadmaster_triggered = 3;
+						}
 					}
+					if(i == 4)
+						deadmaster_triggered = 3;
 				}				
-				
-				
-				
-			}
+								
+			 }
 			if(!RELAY_1TO5.Bits.b0)
 					{
 					if((pwm_flag&0x01) == 0x00)
@@ -500,13 +508,17 @@ uint8 i = 0;
 						}
 					else
 						relay_ctl_pwm(1,pwm_duty);
-					RELAY1_LED_ON					
+					#ifdef TSTAT8_HUNTER
+					RELAY1_LED_ON	
+					#endif					
 					}
 			else
 					{
 					relay_ctl_pwm(1,0);
-					pwm_flag &= 0xfe;	
+					pwm_flag &= 0xfe;
+					#ifdef TSTAT8_HUNTER						
 					RELAY1_LED_OFF
+					#endif
 					}
 		}		
 				
@@ -520,14 +532,17 @@ uint8 i = 0;
 					}
 				else
 					relay_ctl_pwm(2,pwm_duty);	
-
-				RELAY2_LED_ON				
+				#ifdef TSTAT8_HUNTER
+				RELAY2_LED_ON	
+				#endif				
 				}
 		else
 				{
 				relay_ctl_pwm(2,0);
-				pwm_flag &= 0xfd;	
+				pwm_flag &= 0xfd;
+				#ifdef TSTAT8_HUNTER					
 					RELAY2_LED_OFF
+					#endif
 				}
 
 		if(!RELAY_1TO5.Bits.b2)
@@ -539,13 +554,17 @@ uint8 i = 0;
 					}
 				else
 					relay_ctl_pwm(3,pwm_duty);
-				RELAY3_LED_ON				
+				#ifdef TSTAT8_HUNTER
+				RELAY3_LED_ON	
+				#endif
 				}
 		else
 				{
 				relay_ctl_pwm(3,0);
 				pwm_flag &= 0xfb;
-				RELAY3_LED_OFF					
+				#ifdef TSTAT8_HUNTER
+				RELAY3_LED_OFF
+				#endif					
 				}
 				
 		if(!RELAY_1TO5.Bits.b3)
@@ -557,13 +576,17 @@ uint8 i = 0;
 					}
 				else
 					relay_ctl_pwm(4,pwm_duty);
-				RELAY4_LED_ON				
+				#ifdef TSTAT8_HUNTER
+				RELAY4_LED_ON	
+				#endif		
 				}
 		else
 				{
 				relay_ctl_pwm(4,0);
 				pwm_flag &= 0xf7;
-				RELAY4_LED_OFF						
+				#ifdef TSTAT8_HUNTER
+				RELAY4_LED_OFF
+				#endif					
 				}
 				
 		if(!RELAY_1TO5.Bits.b4)
@@ -575,16 +598,20 @@ uint8 i = 0;
 					}
 				else
 					relay_ctl_pwm(5,pwm_duty);
-				RELAY5_LED_ON					
+				#ifdef TSTAT8_HUNTER
+				RELAY5_LED_ON
+				#endif
 				}
 		else
 				{
 				relay_ctl_pwm(5,0);
-				pwm_flag &= 0xef;	
-				RELAY5_LED_OFF	
+				pwm_flag &= 0xef;
+				#ifdef TSTAT8_HUNTER					
+				RELAY5_LED_OFF
+				#endif
 				}
 
-		if(deadmaster_triggered)
+		if(deadmaster_triggered == 1)
 		{
 			if(DeadMsater_AutoManual == 2)//deadmaster manual mode, outputs will follow demaster setting 
 			{
@@ -595,7 +622,7 @@ uint8 i = 0;
 
 			if(GetByteBit(&EEP_OutputManuEnable, 5))//analog output1 manual mode 
 				{
-					if((deadmaster_triggered) && (DeadMsater_AutoManual == 2))
+					if((deadmaster_triggered == 1) && (DeadMsater_AutoManual == 2))
 					{
 						ao_temp = DeadMsater_CoolOutput_HI ;
 						ao_temp *= 256;
@@ -610,7 +637,7 @@ uint8 i = 0;
 						
 					}	
 					
-					if(EEP_Output1Scale == OUTPUT_ANALOG_RANGE_ONOFF)
+					if((EEP_Output1Scale == OUTPUT_ANALOG_RANGE_ONOFF)||(EEP_Output1Scale == OUTPUT_ANALOG_RANGE_PWM))
 					{
 						#ifdef TSTAT8_HUNTER
 							 if(ao_temp == 1)
@@ -640,6 +667,7 @@ uint8 i = 0;
 					{	
 						
 					case OUTPUT_ANALOG_RANGE_ONOFF:
+					case OUTPUT_ANALOG_RANGE_PWM:
 					#ifdef TSTAT8_HUNTER
 							if(OUTPUT_1TO5.Bits.b5)  //output on /high
 								{
@@ -674,6 +702,7 @@ uint8 i = 0;
 								valve[0] = FrcMinFreshAir*10;
 						 }
 						set_output(TIM4,2, valve[0]);
+						// set_output(TIM4,2, output_priority[MAX_BOS][9]);
 					break;
 						
 			//		case OUTPUT_ANALOG_RANGE_PWM:
@@ -682,6 +711,7 @@ uint8 i = 0;
 					
 					default:
 						set_output(TIM4,2, valve[0]);
+					
 					break;	
 					
 					}
@@ -689,7 +719,7 @@ uint8 i = 0;
 		
 			if(GetByteBit(&EEP_OutputManuEnable, 6))//analog output2 manua2 mode 
 			{
-				if((deadmaster_triggered) && (DeadMsater_AutoManual == 2))
+				if((deadmaster_triggered == 1) && (DeadMsater_AutoManual == 2))
 					{
 						ao_temp = DeadMsater_HeatOutput_LO;
 						ao_temp *= 256;
@@ -702,7 +732,7 @@ uint8 i = 0;
 						ao_temp += ManualAO2_LO;								
 					}
 					
-					if(EEP_Output2Scale == OUTPUT_ANALOG_RANGE_ONOFF)
+					if((EEP_Output2Scale == OUTPUT_ANALOG_RANGE_ONOFF)||(EEP_Output1Scale == OUTPUT_ANALOG_RANGE_PWM))
 					{
 						#ifdef TSTAT8_HUNTER
 							 if(ao_temp == 1)
@@ -731,6 +761,7 @@ uint8 i = 0;
 			switch(EEP_Output2Scale)
 				{
 				case OUTPUT_ANALOG_RANGE_ONOFF:
+				case OUTPUT_ANALOG_RANGE_PWM:
 					#ifdef TSTAT8_HUNTER
 						if(OUTPUT_1TO5.Bits.b6)  //output on /high
 						{
@@ -762,10 +793,6 @@ uint8 i = 0;
 
 					set_output(TIM4,3, valve[1]);		
 
-				break;
-				
-				case OUTPUT_ANALOG_RANGE_PWM:
-					
 				break;
 
 				default:

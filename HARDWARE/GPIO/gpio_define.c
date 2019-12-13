@@ -27,7 +27,7 @@
 		 {RCC_APB2Periph_GPIOC,	GPIOC, GPIO_Pin_4},	//AI_CHSEL0	C4
 		 {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_5},	//AI_MODE_SEL	A5
 		};
-	#else
+	#else 
 const _STR_GPIO_MAP_ gpio_map[GPIO_DEFINE_END] = 
 {
  {RCC_APB2Periph_GPIOA,	GPIOA, GPIO_Pin_9},  	//UART_TX			A9

@@ -1,26 +1,33 @@
 #ifndef _DEFINE_H
 #define _DEFINE_H
 
+#define SCH_XPOS  10
+
 #define DEFAULT_FILTER   5
 #define int16		signed short int
-#define TSTAT_ZIGBEE
+//#define TSTAT_ZIGBEE
+#define WATCHDOG_TEST
+//#define AI7_TEST
 //#define TSTAT8_HUNTER
 #define TSTAT_CO2
 //#define TSTAT_OCC
 //#define OCCTEST 
-
 //#define COLOR_TEST
 #ifdef TSTAT_ARM
 //#define TSTAT7_ARM
+//#define T7_ID_CHANGE  1
+//#define ROLY 
 //#define ZIGBEE_MODE_DEBUG
 
 #include "types.h"
 #include "stm32f10x.h"
 #include "bitmap.h"
 
-
+#define BAC_TO_MODBUS 4
 #define HW_VERSION   4
+#define HW_VERSION_OVERSHOOT   5
 
+#ifdef TSTAT8_HUNTER
 #define RS485_LED_ON			GPIO_ResetBits(GPIOE, GPIO_Pin_1);
 #define RS485_LED_OFF			GPIO_SetBits(GPIOE, GPIO_Pin_1);
 #define RELAY1_LED_ON			GPIO_ResetBits(GPIOE, GPIO_Pin_2);
@@ -54,7 +61,7 @@
 #define AI7_LED_ON			GPIO_ResetBits(GPIOE, GPIO_Pin_15);
 #define AI7_LED_OFF		GPIO_SetBits(GPIOE, GPIO_Pin_15);
 
-
+#endif //TSTAT8 HUNTER
 
 
 
@@ -147,6 +154,7 @@
 #define OVERRIDE_TRIGGERED   1
 #define OVERRIDE_WORKING   2
 
+//extern uint16 ctest[50];
 typedef struct
 {
 uint8 first_line[10];
@@ -203,7 +211,7 @@ enum GPIO_NUM{
 #endif
 #define MAX_AI_CHANNEL	 8
 
-#define SERIALDEALTIME_DELAY		10
+#define SERIALDEALTIME_DELAY		3
 #define SCHEDULE_ON 	1
 #define SCHEDULE_OFF  0
 
@@ -438,6 +446,12 @@ uint8 name[9];
 #define LCD_SDA		PDout(3) ///PD3
 #define LCD_RES		PDout(15)// PD15
 
+#define LCDRS    PDout(15)//reset
+#define LCDA0    PDout(1)//cmd or data
+#define LCDSI    PDout(5)//data line
+#define LCDSK		 PDout(4)//clock
+#define LCDCS    PDout(6)//chip select
+
 #ifdef TSTAT_OCC
 #define LCD_RS		PBout(6) //PD2
 #else
@@ -545,9 +559,9 @@ uint8 tm[2];
 #define SN_RECOVERY  2
 
 #ifdef 	ZIGBEE
-#define  COMMUNICATION_MODE 		1
+#define  COMMUNICATION_MODE 		2
 #else
-#define  COMMUNICATION_MODE 		0
+#define  COMMUNICATION_MODE 		2
 #endif //ZIGBEE
 
 //define analog input range here
@@ -599,7 +613,7 @@ uint8 tm[2];
 	#define  T5E_NEW
 	#define  pic_ver_14_up
 	#define  RTC8563
-	#define  VAV
+//	#define  VAV
   
 
 	
@@ -659,7 +673,7 @@ uint8 tm[2];
 
 	#define CLOCK_PRESENT		1
 	#define HUMIDITY_PRESENT	2
-	#define CO2_PRESENT	   		3
+	//#define CO2_PRESENT	   		3
 	#define CO_PRESENT	    	4
 	#define SPARE_PRESENT	    5
 
@@ -831,7 +845,7 @@ uint8 tm[2];
 #define SEL_HUM                  0x02
 	
     #define OLD   0
-	#define NEW   1	
+	//#define NEW   1	
 	#define FALSE 0
 	#define TRUE 1
 //cc there is no gridconfig cunftion any more, so block this	
@@ -1096,12 +1110,16 @@ uint8 tm[2];
 	DECREASE_COOLING_SETPOINT , //10
 	INCREASE_HEATING_SETPOINT , //OCCUPIED_UNOCCUPIED_SWITCH , //11 ///cc change this for clock//  
 	DECREASE_HEATING_SETPOINT ,//SELECT_FUNCTION, //12 ///cc change this for clock  //	
+	SELECT_ITEM_UP,
+	SELECT_ITEM_DOWN,
 	INCREASE_FAN_SPEED , //13
 	#ifdef TSTAT7_ARM
 	DECREASE_FAN_SPEED , //14
 	#else
 	INCREASE_SYS_MODE,//	DECREASE_FAN_SPEED , //14
 	#endif
+	T8_DECREASE_FAN_SPEED,
+	DECREASE_SYS_MODE,
 	START_MENU_MODE ,//17
 	EXIT_MENU_MODE ,//18
 	START_NEXT_MENU , //19
@@ -1439,8 +1457,8 @@ Menu types
 	EEP_FREEZE_TEMP_SETPOINT,				// 	temperature setpoitn in freeze protect
 	EEP_FREEZE_DELAY_ON,					// 	delay several seconds to sure the temp less than setpoint
 	EEP_FREEZE_DELAY_OFF,//					// 	the Tstat will heat several minutes
-	EEP_ANALOG1_FUNCTION,//90					// 	AI1 is used for what function.0,normal 1,freeze protect 2,occupacy 
-	EEP_ANALOG2_FUNCTION, 					//	AI2 is used for what function.3,sweep off 4,clock 5,change over mode
+	EEP_ANALOG1_FUNCTION_SPARE,//90					// 	AI1 is used for what function.0,normal 1,freeze protect 2,occupacy 
+	EEP_ANALOG2_FUNCTION_SPARE, 					//	AI2 is used for what function.3,sweep off 4,clock 5,change over mode
 	EEP_TIMER_ON,							// 	the timer will on how long time
 
 	EEP_TIMER_OFF = EEP_TIMER_ON + 2,		// 	the timer will off how long time
@@ -1617,7 +1635,7 @@ Menu types
 	TEMPRATURE_SENSOR ,                       // 1
 	COOLING_VALVE ,                         // 2
 	HEATING_VALVE ,                         // 3
-	PID ,									// 4	 120
+	PID,									// 4	 120
 	PID_UNIVERSAL ,
 	COOL_HEAT_MODE ,						// 6
 	MODE_OPERATION ,						// 7
@@ -1845,10 +1863,10 @@ Menu types
 
 	EEP_WINDOW_INTERLOCK_HEATING_SETPOINT = EEP_WINDOW_INTERLOCK_COOLING_SETPOINT + 2,
 
-	TEST1 = EEP_WINDOW_INTERLOCK_HEATING_SETPOINT + 2,
-	TEST2 ,
-	TEST3 ,
-	EEP_RESERVED,
+	EEPSPARE1 = EEP_WINDOW_INTERLOCK_HEATING_SETPOINT + 2,
+	EEP_CO2_AUTOCAL_SW,
+	EEPSPARE3,
+	EEPSPARE4,
   CURRENT_SETPOINT,
   CURRENT_SETPOINT_OFFSET,
 	EEP_TWO_BYTE_SETPOINT,
@@ -1916,8 +1934,8 @@ Menu types
 	EEP_DAY,	
 	EEP_HOUR,
 	EEP_MINUTE,
- 	EEP_SECOND,	 
-	EEP_DIAGNOSTIC_ALARM,
+ 	EEP_ANALOG1_FUNCTION,//EEP_SECOND,	 
+	EEP_ANALOG2_FUNCTION,//EEP_DIAGNOSTIC_ALARM,
 	EEP_ANALOG3_FUNCTION,//future
 	EEP_ANALOG4_FUNCTION,//future
 	EEP_ANALOG5_FUNCTION,//future
@@ -2053,8 +2071,8 @@ Menu types
 	EEP_PID3_OFF_OUTPUT_HEAT1,
 	EEP_PID3_OFF_OUTPUT_HEAT2,
 	EEP_PID3_OFF_OUTPUT_HEAT3,
-	EEP_WIRELESS_PIR_RESPONSE1,
-	EEP_WIRELESS_PIR_RESPONSE2,
+	EEP_DELTA_TEM1,
+	EEP_DELTA_TEM2,
 	EEP_WIRELESS_PIR_RESPONSE3,
 	EEP_WIRELESS_PIR_RESPONSE4,
 	EEP_WIRELESS_PIR_RESPONSE5,
@@ -2386,7 +2404,7 @@ Menu types
 	
 	EEP_4TO20MA_UNIT_LO = EEP_4TO20MA_UNIT_HI + 2,
 	
-	BAC_TEST1 = EEP_4TO20MA_UNIT_LO + 2,
+	EEP_MAX_MASTER = EEP_4TO20MA_UNIT_LO + 2,
 	BAC_TEST2,
 	BAC_TEST3,
 	BAC_TEST4,
@@ -2394,11 +2412,137 @@ Menu types
 	BAC_TEST6,
 	BAC_TEST7,
 	BAC_TEST8,
+	TEST1,
+	TEST2,
+	TEST3,
+	TEST4,
+	TEST5,
 	TEST6,
 	TEST7,
 	TEST8,
 	TEST9,
-	TEST10
+	TEST10,
+	
+	EEP_MAX_WORK_SP_2 = TEST10 + 2,//max work setpoint  40C  
+	EEP_MIN_WORK_SP_2,//min work setpoint  16C
+	EEP_MAX_SLEEP_SP_2,//max sleeping setpoint 30C		
+	EEP_MIN_SLEEP_SP_2,//min sleeping setpoint 15C	
+	EEP_MAX_HOLIDAY_SP_2,//
+	EEP_MIN_HOLIDAY_SP_2,//min holiday setpoint   >5C
+	EEP_PIR_SENSETIVITY_2,
+	EEP_SCHEDULE_MONDAY_EVENT1_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_MONDAY_EVENT1_M_2,//
+	EEP_SCHEDULE_MONDAY_EVENT2_H_2,// at work (sun + no man)
+	EEP_SCHEDULE_MONDAY_EVENT2_M_2,// 
+	EEP_SCHEDULE_MONDAY_EVENT3_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_MONDAY_EVENT3_M_2,//
+	EEP_SCHEDULE_MONDAY_EVENT4_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_MONDAY_EVENT4_M_2,//
+	EEP_SCHEDULE_MONDAY_EVENT5_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_MONDAY_EVENT5_M_2,//
+	EEP_SCHEDULE_MONDAY_EVENT6_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_MONDAY_EVENT6_M_2,//
+	EEP_SCHEDULE_TUESDAY_EVENT1_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_TUESDAY_EVENT1_M_2,//
+	EEP_SCHEDULE_TUESDAY_EVENT2_H_2,// at work (sun + no man)
+	EEP_SCHEDULE_TUESDAY_EVENT2_M_2,// 
+	EEP_SCHEDULE_TUESDAY_EVENT3_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_TUESDAY_EVENT3_M_2,//
+	EEP_SCHEDULE_TUESDAY_EVENT4_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_TUESDAY_EVENT4_M_2,//
+	EEP_SCHEDULE_TUESDAY_EVENT5_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_TUESDAY_EVENT5_M_2,//
+	EEP_SCHEDULE_TUESDAY_EVENT6_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_TUESDAY_EVENT6_M_2,//
+	EEP_SCHEDULE_WENSDAY_EVENT1_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_WENSDAY_EVENT1_M_2,//
+	EEP_SCHEDULE_WENSDAY_EVENT2_H_2,// at work (sun + no man)
+	EEP_SCHEDULE_WENSDAY_EVENT2_M_2,// 
+	EEP_SCHEDULE_WENSDAY_EVENT3_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_WENSDAY_EVENT3_M_2,//
+	EEP_SCHEDULE_WENSDAY_EVENT4_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_WENSDAY_EVENT4_M_2,//
+	EEP_SCHEDULE_WENSDAY_EVENT5_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_WENSDAY_EVENT5_M_2,//
+	EEP_SCHEDULE_WENSDAY_EVENT6_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_WENSDAY_EVENT6_M_2,//		
+	EEP_SCHEDULE_THURSDAY_EVENT1_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_THURSDAY_EVENT1_M_2,//
+	EEP_SCHEDULE_THURSDAY_EVENT2_H_2,// at work (sun + no man)
+	EEP_SCHEDULE_THURSDAY_EVENT2_M_2,// 
+	EEP_SCHEDULE_THURSDAY_EVENT3_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_THURSDAY_EVENT3_M_2,//
+	EEP_SCHEDULE_THURSDAY_EVENT4_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_THURSDAY_EVENT4_M_2,//
+	EEP_SCHEDULE_THURSDAY_EVENT5_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_THURSDAY_EVENT5_M_2,//
+	EEP_SCHEDULE_THURSDAY_EVENT6_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_THURSDAY_EVENT6_M_2,//	
+	EEP_SCHEDULE_FRIDAY_EVENT1_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_FRIDAY_EVENT1_M_2,//
+	EEP_SCHEDULE_FRIDAY_EVENT2_H_2,// at work (sun + no man)
+	EEP_SCHEDULE_FRIDAY_EVENT2_M_2,// 
+	EEP_SCHEDULE_FRIDAY_EVENT3_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_FRIDAY_EVENT3_M_2,//
+	EEP_SCHEDULE_FRIDAY_EVENT4_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_FRIDAY_EVENT4_M_2,//
+	EEP_SCHEDULE_FRIDAY_EVENT5_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_FRIDAY_EVENT5_M_2,//
+	EEP_SCHEDULE_FRIDAY_EVENT6_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_FRIDAY_EVENT6_M_2,//		
+	EEP_SCHEDULE_SATDAY_EVENT1_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_SATDAY_EVENT1_M_2,//
+	EEP_SCHEDULE_SATDAY_EVENT2_H_2,// at work (sun + no man)
+	EEP_SCHEDULE_SATDAY_EVENT2_M_2,// 
+	EEP_SCHEDULE_SATDAY_EVENT3_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_SATDAY_EVENT3_M_2,//
+	EEP_SCHEDULE_SATDAY_EVENT4_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_SATDAY_EVENT4_M_2,//
+	EEP_SCHEDULE_SATDAY_EVENT5_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_SATDAY_EVENT5_M_2,//
+	EEP_SCHEDULE_SATDAY_EVENT6_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_SATDAY_EVENT6_M_2,//	
+	EEP_SCHEDULE_SUNDAY_EVENT1_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_SUNDAY_EVENT1_M_2,//
+	EEP_SCHEDULE_SUNDAY_EVENT2_H_2,// at work (sun + no man)
+	EEP_SCHEDULE_SUNDAY_EVENT2_M_2,// 
+	EEP_SCHEDULE_SUNDAY_EVENT3_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_SUNDAY_EVENT3_M_2,//
+	EEP_SCHEDULE_SUNDAY_EVENT4_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_SUNDAY_EVENT4_M_2,//
+	EEP_SCHEDULE_SUNDAY_EVENT5_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_SUNDAY_EVENT5_M_2,//
+	EEP_SCHEDULE_SUNDAY_EVENT6_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_SUNDAY_EVENT6_M_2,//		
+	EEP_SCHEDULE_HOLIDAY_EVENT1_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_HOLIDAY_EVENT1_M_2,//
+	EEP_SCHEDULE_HOLIDAY_EVENT2_H_2,// at work (sun + no man)
+	EEP_SCHEDULE_HOLIDAY_EVENT2_M_2,// 
+	EEP_SCHEDULE_HOLIDAY_EVENT3_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_HOLIDAY_EVENT3_M_2,//
+	EEP_SCHEDULE_HOLIDAY_EVENT4_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_HOLIDAY_EVENT4_M_2,//
+	EEP_SCHEDULE_HOLIDAY_EVENT5_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_HOLIDAY_EVENT5_M_2,//
+	EEP_SCHEDULE_HOLIDAY_EVENT6_H_2,// at home (sun + man)				//EEP_SCHEDULE
+	EEP_SCHEDULE_HOLIDAY_EVENT6_M_2,//
+	EEP_SCHEDULE_MONDAY_FLAG_2,
+	EEP_SCHEDULE_TUESDAY_FLAG_2 = EEP_SCHEDULE_MONDAY_FLAG_2 + 3,
+	EEP_SCHEDULE_WENSDAY_FLAG_2 = EEP_SCHEDULE_TUESDAY_FLAG_2 + 3,
+	EEP_SCHEDULE_THURSDAY_FLAG_2 = EEP_SCHEDULE_WENSDAY_FLAG_2 + 3,
+	EEP_SCHEDULE_FRIDAY_FLAG_2 = EEP_SCHEDULE_THURSDAY_FLAG_2 + 3,
+	EEP_SCHEDULE_SATDAY_FLAG_2 = EEP_SCHEDULE_FRIDAY_FLAG_2 + 3,
+	EEP_SCHEDULE_SUNDAY_FLAG_2 = EEP_SCHEDULE_SATDAY_FLAG_2 + 3,
+	EEP_SCHEDULE_HOLIDAY_FLAG_2 = EEP_SCHEDULE_SUNDAY_FLAG_2 + 3,
+	EEP_SCHEDULE_DAY_BEGAIN_2 = EEP_SCHEDULE_HOLIDAY_FLAG_2 + 3,
+	EEP_SCHEDULE_DAY_END_2 = EEP_SCHEDULE_DAY_BEGAIN_2 + 46,
+	
+	
+	EEP_IP_MODE,
+	EEP_IP1,
+	EEP_IP2,
+	EEP_IP3,
+	EEP_IP4,
 	
 /*********************END*************************/
 
@@ -2574,6 +2718,16 @@ typedef struct
 	uint8 status;
 	uint8 config;
 }STR_FRC_INPUT;
+
+
+
+typedef enum{
+  NO_ERROR       = 0x00, // no error
+  ACK_ERROR      = 0x01, // no acknowledgment error
+  CHECKSUM_ERROR = 0x02, // checksum mismatch error
+  TIMEOUT_ERROR  = 0x04, // timeout error
+  PARM_ERROR     = 0x80, // parameter out of range error
+}etError;
 
 
 

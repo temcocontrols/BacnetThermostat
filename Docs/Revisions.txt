@@ -1,4 +1,4 @@
-//rev6_2
+//rev6_2 
 //2018 03 19 fixed when changing serial number, cause CRC error problem, the backup position of serial number is overlap with CRC table. 
 //rev6_1
 //store modbus ID and serial number in flash, not in the eeprom 
