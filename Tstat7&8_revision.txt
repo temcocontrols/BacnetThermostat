@@ -1,3 +1,7 @@
+rev 9_3
+by Charly
+github base version
+
 rev9_1
 add baudrate 76800 ,1200, 4800 and 14400 to BACNET AVS, make them be writeable.
 
