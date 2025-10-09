@@ -1,8 +1,14 @@
 # BacnetThermostat
 
-**This product is our legacy CONFIGURABLE thermostat. See the new Tstat10E for the latest work
-  The source for the Tstat10E is here: https://github.com/temcocontrols/T3-programmable-controller-on-ESP32
-   Product Page:  https://temcocontrols.com/shop/tstat10e-fully-programmable-thermostat/
+**This repository is for our legacy Tstat8 CONFIGURABLE thermostat. 
+
+See the new Tstat10E for the latest work on the PROGRAMMABLE Tstat10E
+
+
+The source for the Tstat10E is here: https://github.com/temcocontrols/T3-programmable-controller-on-ESP32
+   
+   
+Product Page:  https://temcocontrols.com/shop/tstat10e-fully-programmable-thermostat/
 
    
 *******************Legacy Tstat8 Project *****************************
